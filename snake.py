@@ -301,6 +301,8 @@ def draw_cherckerboard ():
 def game_loop(rect_width, rect_height, display, agent):
     iteration = 1
     action = 1
+    log_prob = None
+    state_value = None
 
     # food_actuel = food(9 * 50, 5 * 50)
 
@@ -360,7 +362,8 @@ def game_loop(rect_width, rect_height, display, agent):
 
         if not player:
             # action = random.randint(0, action_dim)
-            action = agent.select_action(state, action_dim)
+            # Pour PPO, on a besoin du log_prob et de la state_value
+            action, log_prob, state_value = agent.select_action_with_log_prob(state)
             # print(action)
 
         if action == 0 and my_snake.direction != "DOWN":  # î : 1 / -> : 2 / v : 3 / <- : 4
@@ -460,9 +463,9 @@ def game_loop(rect_width, rect_height, display, agent):
              distance_food_south(my_snake, food_actuel), distance_food_south_west(my_snake, food_actuel),
              distance_food_west(my_snake, food_actuel), distance_food_north_west(my_snake, food_actuel)]
 
-
-
-        agent.replay_buffer.push(state, action, reward, next_state, done)
+        # Pour PPO, on stocke: state, action, reward, state_value, log_prob, done
+        if not player and log_prob is not None:
+            agent.buffer.push(state, action, reward, state_value, log_prob, done)
 
         if show:
             pygame.display.update()
