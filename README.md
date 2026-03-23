@@ -10,6 +10,10 @@
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Contributions](https://img.shields.io/badge/contributions-welcome-orange.svg)
 
+<p align="center">
+  <img src="img/SnakePPO-Score17.gif" alt="Snake AI playing with PPO" width="400">
+</p>
+
 ## 📖 Project Description
 
 This project is the **third installment** of my Snake AI series :
