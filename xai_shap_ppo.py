@@ -195,7 +195,7 @@ def compute_shap_values(agent: PPOAgent,
     print(f"  [SHAP] Background : {bg_size} états | Total : {len(states)} états…")
     explainer   = shap.DeepExplainer(wrapper, bg_t)
     states_t    = torch.tensor(states, dtype=torch.float32, device=agent.device)
-    shap_raw    = explainer.shap_values(states_t)
+    shap_raw    = explainer.shap_values(states_t, check_additivity=False)
     expected    = explainer.expected_value
 
     if isinstance(expected, torch.Tensor):
