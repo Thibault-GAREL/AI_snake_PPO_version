@@ -28,17 +28,31 @@ The project also includes a full **Explainable AI (XAI)** suite adapted for the 
 
 ---
 
-## 🔄 PPO vs DQN — Key Differences
+## 🆚 Comparison — 4 Snake AI approaches
 
-| Aspect | DQN | PPO |
-|--------|-----|-----|
-| Algorithm type | Off-policy (Q-learning) | On-policy (Actor-Critic) |
-| Output | Q-values [4] | Policy logits [4] + State value [1] |
-| Memory | Experience Replay (100k) | Rollout buffer (2048 steps) |
-| Learning signal | Bellman error | Clipped surrogate + GAE |
-| Network | Single MLP (Q-network) | Shared trunk → Actor + Critic heads |
-| State features | 16 (distances only) | 22 (+direction, length, urgency) |
-| Exploration | ε-greedy decay | Entropy bonus |
+This project is part of a series of **4 Snake AI implementations** using different AI paradigms on the same game :
+
+| Aspect | 🧬 [NEAT](https://github.com/Thibault-GAREL/AI_snake_genetic_version) | 🤖 [DQL (DQN)](https://github.com/Thibault-GAREL/AI_snake_DQL) | 🎯 [PPO](https://github.com/Thibault-GAREL/snake_PPO_V2) ★ | 🌳 [Decision Tree](https://github.com/Thibault-GAREL/AI_snake_decision_tree_version) |
+| --- | --- | --- | --- | --- |
+| **Paradigm** | Evolutionary | Reinforcement Learning | Reinforcement Learning | Imitation Learning |
+| **Algorithm type** | Neuroevolution | Off-policy (Q-learning) | On-policy (Actor-Critic) | Supervised (XGBoost + DAgger) |
+| **Output** | Actions [4] | Q-values [4] | Policy logits [4] + V(s) [1] | Class probabilities [4] |
+| **Input features** | 16 | 16 | 22 | 26 |
+| **Architecture** | Evolving MLP (topology changes) | MLP 16→256→128→64→4 | Actor-Critic shared trunk 22→256→256 | 1 600 boosted trees (400 × 4 classes) |
+| **Hidden neurons / nodes** | ~28 nodes (evolves) | 448 hidden neurons | 896 hidden neurons | ~80k–200k decision nodes |
+| **Exploration** | Genetic mutations + speciation | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) | DAgger oracle (β : 0.8 → 0.05) |
+| **Memory / Buffer** | Population (100 genomes) | Experience Replay (100 000) | Rollout buffer (2 048 steps) | Supervised buffer (300 000) |
+| **Batch** | — (full population eval.) | 128 | 64 | Full dataset per round |
+| **Training time** | ~15 h | ~30–60 min (GPU) | ~6.2 h | ~6–10 min (GPU) |
+| **Max score** | > 20 | 13 | 21 | **31** |
+| **Mean score** | 10 | 8.55 | **10.18** | ~5–15 (est.) |
+| **Reward signal** | ❌ (fitness only) | ✅ | ✅ | ❌ (oracle labels) |
+| **GPU support** | ❌ | ✅ | ✅ | ✅ |
+| **Sample efficiency** | 🔴 Low | 🟡 Medium | 🔴 Low | 🟢 High |
+| **Intrinsic interpretability** | 🟡 Low | 🔴 Black box | 🔴 Black box | 🟢 High (tree paths) |
+| **XAI suite** | ✅ 4 scripts | ✅ 4 scripts | ✅ 4 scripts | ✅ 4 scripts |
+
+> ★ = current repository
 
 ---
 
@@ -94,58 +108,58 @@ Input (22)
 
 ### Distances to obstacles (8 inputs)
 
-| # | Feature |
-|---|---------|
-| 0 | `danger_N`  — Distance to nearest obstacle North |
-| 1 | `danger_NE` — Distance to nearest obstacle North-East |
-| 2 | `danger_E`  — Distance to nearest obstacle East |
-| 3 | `danger_SE` — Distance to nearest obstacle South-East |
-| 4 | `danger_S`  — Distance to nearest obstacle South |
-| 5 | `danger_SW` — Distance to nearest obstacle South-West |
-| 6 | `danger_W`  — Distance to nearest obstacle West |
-| 7 | `danger_NW` — Distance to nearest obstacle North-West |
+| #   | Feature                                               |
+| --- | ----------------------------------------------------- |
+| 0   | `danger_N` — Distance to nearest obstacle North       |
+| 1   | `danger_NE` — Distance to nearest obstacle North-East |
+| 2   | `danger_E` — Distance to nearest obstacle East        |
+| 3   | `danger_SE` — Distance to nearest obstacle South-East |
+| 4   | `danger_S` — Distance to nearest obstacle South       |
+| 5   | `danger_SW` — Distance to nearest obstacle South-West |
+| 6   | `danger_W` — Distance to nearest obstacle West        |
+| 7   | `danger_NW` — Distance to nearest obstacle North-West |
 
 All normalized by `√(WIDTH² + HEIGHT²)` → [0, 1]
 
 ### Distances to food (8 inputs)
 
-| # | Feature |
-|---|---------|
-| 8  | `food_N`  — Distance to food if aligned North |
-| 9  | `food_NE` — Distance to food if aligned North-East |
-| 10 | `food_E`  — Distance to food if aligned East |
-| 11 | `food_SE` — Distance to food if aligned South-East |
-| 12 | `food_S`  — Distance to food if aligned South |
-| 13 | `food_SW` — Distance to food if aligned South-West |
-| 14 | `food_W`  — Distance to food if aligned West |
-| 15 | `food_NW` — Distance to food if aligned North-West |
+| #   | Feature                                            |
+| --- | -------------------------------------------------- |
+| 8   | `food_N` — Distance to food if aligned North       |
+| 9   | `food_NE` — Distance to food if aligned North-East |
+| 10  | `food_E` — Distance to food if aligned East        |
+| 11  | `food_SE` — Distance to food if aligned South-East |
+| 12  | `food_S` — Distance to food if aligned South       |
+| 13  | `food_SW` — Distance to food if aligned South-West |
+| 14  | `food_W` — Distance to food if aligned West        |
+| 15  | `food_NW` — Distance to food if aligned North-West |
 
 Sparse encoding : non-zero only if food is exactly aligned in that direction.
 
 ### Direction one-hot (4 inputs)
 
-| # | Feature |
-|---|---------|
-| 16 | `dir_UP`    — 1 if current direction is UP |
-| 17 | `dir_RIGHT` — 1 if current direction is RIGHT |
-| 18 | `dir_DOWN`  — 1 if current direction is DOWN |
-| 19 | `dir_LEFT`  — 1 if current direction is LEFT |
+| #   | Feature                                       |
+| --- | --------------------------------------------- |
+| 16  | `dir_UP` — 1 if current direction is UP       |
+| 17  | `dir_RIGHT` — 1 if current direction is RIGHT |
+| 18  | `dir_DOWN` — 1 if current direction is DOWN   |
+| 19  | `dir_LEFT` — 1 if current direction is LEFT   |
 
 ### Contextual features (2 inputs)
 
-| # | Feature |
-|---|---------|
-| 20 | `length_norm` — Snake length normalized : (length−1) / (MAX_CELLS−1), range [0, 1] |
-| 21 | `urgency`     — Steps since last food / MAX_STEPS, range [0, 1] |
+| #   | Feature                                                                            |
+| --- | ---------------------------------------------------------------------------------- |
+| 20  | `length_norm` — Snake length normalized : (length−1) / (MAX_CELLS−1), range [0, 1] |
+| 21  | `urgency` — Steps since last food / MAX_STEPS, range [0, 1]                        |
 
 ### Output — 4 actions
 
-| # | Action |
-|---|--------|
-| 0 | `UP` |
-| 1 | `RIGHT` |
-| 2 | `DOWN` |
-| 3 | `LEFT` |
+| #   | Action  |
+| --- | ------- |
+| 0   | `UP`    |
+| 1   | `RIGHT` |
+| 2   | `DOWN`  |
+| 3   | `LEFT`  |
 
 </details>
 
@@ -155,15 +169,16 @@ Sparse encoding : non-zero only if food is exactly aligned in that direction.
 
 Four dedicated scripts analyze the PPO actor-critic model from different angles, adapted from the DQN XAI suite to handle the new architecture (Tanh activations, 22 features, policy probabilities instead of Q-values) :
 
-| Script | Analysis | Output |
-|--------|----------|--------|
-| `xai_qvalues_ppo.py` | Policy probability heatmaps, confidence map, temporal evolution of P(action) + V(s) | `xai_qvalues_ppo/` |
-| `xai_features_ppo.py` | Permutation importance, weight variance (W₁ 22→256), feature-action correlation | `xai_features_ppo/` |
-| `xai_activations_ppo.py` | Tanh saturation, neuron specialization, t-SNE / UMAP of 4 layers | `xai_activations_ppo/` |
-| `xai_shap_ppo.py` | SHAP DeepExplainer on ActorWrapper — beeswarm, waterfall, force plots, summary heatmap | `xai_shap_ppo/` |
+| Script                   | Analysis                                                                               | Output                 |
+| ------------------------ | -------------------------------------------------------------------------------------- | ---------------------- |
+| `xai_qvalues_ppo.py`     | Policy probability heatmaps, confidence map, temporal evolution of P(action) + V(s)    | `xai_qvalues_ppo/`     |
+| `xai_features_ppo.py`    | Permutation importance, weight variance (W₁ 22→256), feature-action correlation        | `xai_features_ppo/`    |
+| `xai_activations_ppo.py` | Tanh saturation, neuron specialization, t-SNE / UMAP of 4 layers                       | `xai_activations_ppo/` |
+| `xai_shap_ppo.py`        | SHAP DeepExplainer on ActorWrapper — beeswarm, waterfall, force plots, summary heatmap | `xai_shap_ppo/`        |
 
 > **Note on XAI adaptations vs DQN :**
-> - **No dead neurons** : Tanh never outputs exactly 0. Replaced by *saturation* analysis (|act| > 0.99)
+>
+> - **No dead neurons** : Tanh never outputs exactly 0. Replaced by _saturation_ analysis (|act| > 0.99)
 > - **No Q-values** : replaced by `softmax(logits)` → policy probabilities P(action) and critic value V(s)
 > - **22 features** split into 4 color-coded categories : 🔵 danger / 🟠 food / 🟢 direction / 🩷 context
 > - **SHAP** : wrapped in `ActorWrapper` to expose only the actor logits to `DeepExplainer`
@@ -176,81 +191,94 @@ Four dedicated scripts analyze the PPO actor-critic model from different angles,
 ### 🖼️ Policy heatmaps (`xai_qvalues_ppo.py`)
 
 #### Policy probability heatmaps + State value
+
 ![xai_heatmaps](xai_qvalues_ppo/xai_heatmaps.png)
 
-*5 heatmaps : P(UP), P(RIGHT), P(DOWN), P(LEFT) and V(s). Food position fixed (★). Each cell shows the policy probability for that action when the snake head is at that position. Warm colors = the agent strongly prefers that action from that cell. The value heatmap V(s) shows which areas the agent considers most promising.*
+_5 heatmaps : P(UP), P(RIGHT), P(DOWN), P(LEFT) and V(s). Food position fixed (★). Each cell shows the policy probability for that action when the snake head is at that position. Warm colors = the agent strongly prefers that action from that cell. The value heatmap V(s) shows which areas the agent considers most promising._
 
 #### Confidence map & learned policy
+
 ![xai_confidence](xai_qvalues_ppo/xai_confidence.png)
 
-*Left : gap between top-1 and top-2 probabilities — dark cells = the agent hesitates between two actions. Right : dominant action per cell with directional arrows, brightness weighted by confidence.*
+_Left : gap between top-1 and top-2 probabilities — dark cells = the agent hesitates between two actions. Right : dominant action per cell with directional arrows, brightness weighted by confidence._
 
 #### Temporal evolution
+
 ![xai_temporal](xai_qvalues_ppo/xai_temporal.png)
 
-*Policy probabilities for all 4 actions over time (solid curves, sum ≈ 1). Dashed white = V(s) normalized. Green markers = food eaten, red markers = death.*
+_Policy probabilities for all 4 actions over time (solid curves, sum ≈ 1). Dashed white = V(s) normalized. Green markers = food eaten, red markers = death._
 
 ---
 
 ### 🖼️ Feature importance (`xai_features_ppo.py`)
 
 #### Permutation importance
+
 ![xai_permutation](xai_features_ppo/xai_permutation.png)
 
-*Score drop when each of the 22 features is randomized. Features with longer bars are critical for performance. Radar chart shows the top-8 most important features.*
+_Score drop when each of the 22 features is randomized. Features with longer bars are critical for performance. Radar chart shows the top-8 most important features._
 
 #### Weight variance (W₁ analysis)
+
 ![xai_variance](xai_features_ppo/xai_variance.png)
 
-*L2 norm and std of each input column in shared[0] Linear(22→256). Features with high L2 norm are structurally important. Heatmap shows the full weight matrix W₁ [22×64 neurons]. Scatter plot reveals the importance quadrant.*
+_L2 norm and std of each input column in shared[0] Linear(22→256). Features with high L2 norm are structurally important. Heatmap shows the full weight matrix W₁ [22×64 neurons]. Scatter plot reveals the importance quadrant._
 
 #### Feature-action correlation
+
 ![xai_correlation](xai_features_ppo/xai_correlation.png)
 
-*Pearson correlation between each feature and each chosen action. Clean patterns confirm the agent uses food direction features to trigger corresponding movements and wall features to avoid obstacles.*
+_Pearson correlation between each feature and each chosen action. Clean patterns confirm the agent uses food direction features to trigger corresponding movements and wall features to avoid obstacles._
 
 #### Sensory profile per action
+
 ![xai_mean_per_action](xai_features_ppo/xai_mean_per_action.png)
 
-*Mean value of all 22 features when the agent chooses each action. Color-coded by category : 🔵 danger, 🟠 food, 🟢 direction, 🩷 context.*
+_Mean value of all 22 features when the agent chooses each action. Color-coded by category : 🔵 danger, 🟠 food, 🟢 direction, 🩷 context._
 
 ---
 
 ### 🖼️ Internal activations (`xai_activations_ppo.py`)
 
 #### Distribution & saturation
+
 ![xai_distribution](xai_activations_ppo/xai_distribution.png)
 
-*Activation distributions for the 4 Tanh layers (shared×2, actor, critic). Unlike ReLU, Tanh never produces exactly 0 — instead we track saturation (|act| > 0.99) and near-zero (|act| < 0.05) neuron rates. Temporal heatmaps show activity over 200 steps sorted by variance.*
+_Activation distributions for the 4 Tanh layers (shared×2, actor, critic). Unlike ReLU, Tanh never produces exactly 0 — instead we track saturation (|act| > 0.99) and near-zero (|act| < 0.05) neuron rates. Temporal heatmaps show activity over 200 steps sorted by variance._
 
 #### Neuron specialization
+
 ![xai_specialization](xai_activations_ppo/xai_specialization.png)
 
-*Specialization score = max_situation(mean_activation) − mean_all_situations. High score = neuron dedicated to a specific game context (danger, food alignment, long snake…). Top-5 most specialized neurons profiled per layer.*
+_Specialization score = max_situation(mean_activation) − mean_all_situations. High score = neuron dedicated to a specific game context (danger, food alignment, long snake…). Top-5 most specialized neurons profiled per layer._
 
 #### t-SNE projection
+
 ![xai_tsne](xai_activations_ppo/xai_tsne.png)
 
-*2D projection of internal activations for 4 layers. Points colored by game situation (left), chosen action (center), and current score (right). Clusters reveal how the network organizes its internal representations.*
+_2D projection of internal activations for 4 layers. Points colored by game situation (left), chosen action (center), and current score (right). Clusters reveal how the network organizes its internal representations._
 
 ---
 
 ### 🖼️ SHAP analysis (`xai_shap_ppo.py`)
 
 #### Beeswarm plot
+
 ![xai_shap_beeswarm](xai_shap_ppo/xai_shap_beeswarm.png)
 
-*Each point = one game state. X-axis = SHAP value (positive = pushes toward this action). Color = feature value (cold=low, warm=high). Features sorted by mean |SHAP| — most impactful at top.*
+_Each point = one game state. X-axis = SHAP value (positive = pushes toward this action). Color = feature value (cold=low, warm=high). Features sorted by mean |SHAP| — most impactful at top._
 
 #### Waterfall plots
+
 ![xai_shap_waterfall](xai_shap_ppo/xai_shap_waterfall.png)
 
-*One waterfall per game situation. Starts from E[f(x)] (baseline logit), accumulates feature contributions to reach the predicted logit f(x). Blue = positive contribution, red = negative.*
+_One waterfall per game situation. Starts from E[f(x)] (baseline logit), accumulates feature contributions to reach the predicted logit f(x). Blue = positive contribution, red = negative._
 
 #### SHAP summary heatmap
+
 ![xai_shap_heatmap](xai_shap_ppo/xai_shap_heatmap.png)
 
-*4 views : |SHAP|×action (absolute importance), signed SHAP×action (direction of influence), global importance barplot ranking all 22 features, and |SHAP|×situation (which feature matters most in which context).*
+_4 views : |SHAP|×action (absolute importance), signed SHAP×action (direction of influence), global importance barplot ranking all 22 features, and |SHAP|×situation (which feature matters most in which context)._
 
 </details>
 
@@ -346,33 +374,33 @@ python xai_shap_ppo.py                                           # all plots
 
 ## ⚙️ Key Hyperparameters
 
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| `LR` | 3e-4 | Adam optimizer initial learning rate |
-| `LR schedule` | CosineAnnealing | Decay from 3e-4 to 1e-5 over training |
-| `GAMMA` | 0.99 | Discount factor |
-| `GAE_LAMBDA` | 0.95 | GAE smoothing parameter |
-| `CLIP_EPS` | 0.15 | PPO surrogate clipping range |
-| `ENT_COEF` | 0.05 | Entropy bonus coefficient |
-| `VF_COEF` | 0.5 | Value function loss coefficient |
-| `MAX_GRAD` | 0.5 | Gradient clipping norm |
-| `N_EPOCHS` | 8 | PPO epochs per update |
-| `BATCH_SIZE` | 64 | Mini-batch size per gradient step |
-| `N_STEPS` | 2048 | Rollout length before each update |
-| `total_timesteps` | 5 000 000 | Training budget |
-| `hidden_size` | 256 | Neurons in shared trunk layers |
+| Parameter         | Value           | Description                           |
+| ----------------- | --------------- | ------------------------------------- |
+| `LR`              | 3e-4            | Adam optimizer initial learning rate  |
+| `LR schedule`     | CosineAnnealing | Decay from 3e-4 to 1e-5 over training |
+| `GAMMA`           | 0.99            | Discount factor                       |
+| `GAE_LAMBDA`      | 0.95            | GAE smoothing parameter               |
+| `CLIP_EPS`        | 0.15            | PPO surrogate clipping range          |
+| `ENT_COEF`        | 0.05            | Entropy bonus coefficient             |
+| `VF_COEF`         | 0.5             | Value function loss coefficient       |
+| `MAX_GRAD`        | 0.5             | Gradient clipping norm                |
+| `N_EPOCHS`        | 8               | PPO epochs per update                 |
+| `BATCH_SIZE`      | 64              | Mini-batch size per gradient step     |
+| `N_STEPS`         | 2048            | Rollout length before each update     |
+| `total_timesteps` | 5 000 000       | Training budget                       |
+| `hidden_size`     | 256             | Neurons in shared trunk layers        |
 
 ---
 
 ## 📈 Reward Shaping
 
-| Event | Reward |
-|-------|--------|
-| Survival (each step) | +0.02 |
-| Food eaten | +10.0 |
-| Win (grid full) | +20.0 |
-| Death (wall or body) | −10.0 − length × 0.5 |
-| Stagnation penalty | −0.5 if `steps_since_food > MAX_STEPS − length×2` |
+| Event                | Reward                                            |
+| -------------------- | ------------------------------------------------- |
+| Survival (each step) | +0.02                                             |
+| Food eaten           | +10.0                                             |
+| Win (grid full)      | +20.0                                             |
+| Death (wall or body) | −10.0 − length × 0.5                              |
+| Stagnation penalty   | −0.5 if `steps_since_food > MAX_STEPS − length×2` |
 
 The death penalty scales with snake length : losing a long snake is penalized more than losing a short one, encouraging the agent to protect its investment.
 
