@@ -43,9 +43,9 @@ This project is part of a series of **4 Snake AI implementations** using differe
 | **Exploration** | Genetic mutations + speciation | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) | DAgger oracle (β : 0.8 → 0.05) |
 | **Memory / Buffer** | Population (100 genomes) | Experience Replay (100 000) | Rollout buffer (2 048 steps) | Supervised buffer (300 000) |
 | **Batch** | — (full population eval.) | 128 | 64 | Full dataset per round |
-| **Training time** | ~15 h | ~30–60 min (GPU) | ~6.2 h | ~6–10 min (GPU) |
-| **Max score** | > 20 | 13 | 21 | **31** |
-| **Mean score** | 10 | 8.55 | **10.18** | ~5–15 (est.) |
+| **Training time** | ~15 h | ~30–60 min (GPU) | ~6.2 h | ~12 min (GPU) |
+| **Max score** | > 20 | 13 | 21 | **43** |
+| **Mean score** | 10 | 8.55 | 10.18 | **22.77** |
 | **Reward signal** | ❌ (fitness only) | ✅ | ✅ | ❌ (oracle labels) |
 | **GPU support** | ❌ | ✅ | ✅ | ✅ |
 | **Sample efficiency** | 🔴 Low | 🟡 Medium | 🔴 Low | 🟢 High |
