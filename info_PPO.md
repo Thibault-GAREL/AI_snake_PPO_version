@@ -1,5 +1,13 @@
 # Informations Détaillées du Modèle PPO V2
 
+## 🔍 Résumé XAI — Interprétabilité du Modèle
+
+Quatre analyses XAI ont été menées sur le modèle PPO V2 entraîné afin d'en comprendre les mécanismes internes. L'analyse des **activations internes** (t-SNE, UMAP, spécialisation neuronale) révèle que le réseau développe des représentations structurées et séparables par situation de jeu, avec une saturation quasi-totale de la couche critique (100%) indiquant une forte confiance dans l'estimation de valeur. L'analyse des **features** (permutation importance, corrélations, poids) confirme que les distances aux dangers sont les variables les plus critiques pour la survie (première cause de chute de score en permutation), suivies de près par les distances à la nourriture qui guident la navigation directionnelle. L'analyse des **heatmaps de politique** montre que l'agent adopte une stratégie spatialement cohérente — la valeur d'état V(s) monte à l'approche de la nourriture et s'effondre à la mort — avec des zones de forte hésitation (faible gap P_max − P_2nd) uniquement dans les configurations ambiguës. Enfin, l'analyse **SHAP** (beeswarm, waterfall, heatmap globale) quantifie précisément que les features `Food_NE`, `Food_E` et `Food_SE` dominent l'influence sur les logits toutes actions confondues, et que l'agent réagit de façon logique et interprétable face aux sept situations-clés testées (danger directionnel, nourriture alignée, situation neutre).
+
+---
+
+
+
 ## 📊 Performances
 
 | Métrique                 | Valeur                      |
