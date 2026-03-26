@@ -1,5 +1,5 @@
 """
-main.py v3
+main.py v4
 ==========
   python main.py                    # entraînement silencieux
   python main.py --show-every 100  # rendu tous les 100 épisodes
@@ -20,7 +20,7 @@ from PPO import PPOAgent, SnakeEnv
 
 
 CFG = {
-    "total_timesteps" : 5_000_000,   # v3 : plus long pour profiter du LR correct
+    "total_timesteps" : 8_000_000,   # v4 : budget étendu pour les 26 features
     "n_steps"         : 2048,
     "hidden_size"     : 256,
     "path_best"       : "model_best.pth",
@@ -58,10 +58,10 @@ def train(args):
              torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print("=" * 65)
-    print(f"  Snake PPO v3 — Entraînement")
+    print(f"  Snake PPO v4 — Entraînement")
     print(f"  Device     : {device}")
     print(f"  Steps max  : {args.timesteps:,}")
-    print(f"  OBS dim    : {SnakeEnv.OBS_DIM}  (distances + direction + longueur + urgence)")
+    print(f"  OBS dim    : {SnakeEnv.OBS_DIM}  (distances + direction + longueur + urgence + food_xy + danger_binary)")
     print("=" * 65)
 
     agent = PPOAgent(
@@ -179,7 +179,7 @@ def evaluate(args):
              torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print("=" * 65)
-    print(f"  Snake PPO v3 — Évaluation")
+    print(f"  Snake PPO v4 — Évaluation")
     print(f"  Modèle : {CFG['path_best']}  |  Épisodes : {args.eval_episodes}")
     print("=" * 65)
 

@@ -1,4 +1,4 @@
-# Informations Détaillées du Modèle PPO V2
+# Informations Détaillées du Modèle PPO V4
 
 ## 🔍 Résumé XAI — Interprétabilité du Modèle
 
@@ -10,6 +10,8 @@ Quatre analyses XAI ont été menées sur le modèle PPO V2 entraîné afin d'en
 
 ## 📊 Performances
 
+### V3 (référence — 22 features, 5M timesteps)
+
 | Métrique                 | Valeur                      |
 | ------------------------ | --------------------------- |
 | **Score Maximum**        | 21 (approx. 21 segments)    |
@@ -17,7 +19,17 @@ Quatre analyses XAI ont été menées sur le modèle PPO V2 entraîné afin d'en
 | **Nombre d'Épisodes**    | 49,328                      |
 | **Nombre de Timesteps**  | 5,000,080                   |
 
+### V4 (26 features, 8M timesteps — à entraîner)
+
+| Métrique                 | Valeur         |
+| ------------------------ | -------------- |
+| **Score Maximum**        | En attente     |
+| **Score Moyen Meilleur** | En attente     |
+| **Nombre de Timesteps**  | 8,000,000      |
+
 ## ⏱️ Temps d'Entraînement
+
+### V3
 
 | Paramètre            | Valeur          |
 | -------------------- | --------------- |
@@ -25,24 +37,34 @@ Quatre analyses XAI ont été menées sur le modèle PPO V2 entraîné afin d'en
 | **Temps en Heures**  | ~6.23 heures    |
 | **Temps en Minutes** | ~373.55 minutes |
 
+### V4 (estimé)
+
+| Paramètre            | Valeur           |
+| -------------------- | ---------------- |
+| **Temps Estimé**     | ~10 heures (GPU) |
+
 ## 🧠 Architecture Réseau
 
 ### Entrée (État)
 
-- **Dimension d'entrée** : 22 features
-  - [0:8] Distances aux dangers (N, NE, E, SE, S, SW, W, NW) normalisées
-  - [8:16] Distances nourriture (même 8 directions) normalisées
+- **Dimension d'entrée** : 26 features *(+4 vs v3)*
+  - [0:8]   Distances aux dangers (N, NE, E, SE, S, SW, W, NW) normalisées
+  - [8:16]  Distances nourriture (même 8 directions) normalisées — *sparses*
   - [16:20] One-hot encoding direction courante (UP, RIGHT, DOWN, LEFT)
-  - [20] Longueur serpent normalisée (0→1)
-  - [21] Urgence nourriture (steps_since_food / MAX_STEPS)
+  - [20]    Longueur serpent normalisée (0→1)
+  - [21]    Urgence nourriture (steps_since_food / MAX_STEPS)
+  - **[22]  food_dx_norm** : (food.x − head.x) / WIDTH — direction continue vers nourriture *(nouveau)*
+  - **[23]  food_dy_norm** : (food.y − head.y) / HEIGHT — direction continue vers nourriture *(nouveau)*
+  - **[24]  danger_front** : 1.0 si obstacle à 1 case devant (binaire) *(nouveau)*
+  - **[25]  danger_left**  : 1.0 si obstacle à 1 case à gauche (binaire) *(nouveau)*
 
 ### Réseau Acteur (Policy Network)
 
 ```
-Input (22)
-  ↓ Linear + ReLU
+Input (26)
+  ↓ Linear + LayerNorm + Tanh
 Hidden (256)
-  ↓ Linear + ReLU
+  ↓ Linear + LayerNorm + Tanh
 Hidden (256)
   ↓ Linear + Tanh
 Hidden (128)
@@ -53,7 +75,7 @@ Output Actions (4)  [UP, RIGHT, DOWN, LEFT]
 ### Réseau Critique (Value Network)
 
 ```
-Hidden (256)  [partageable avec acteur]
+Hidden (256)  [tronc partagé avec acteur]
   ↓ Linear + Tanh
 Hidden (128)
   ↓ Linear
@@ -64,7 +86,7 @@ Output Value (1)
 
 | Paramètre                       | Valeur            |
 | ------------------------------- | ----------------- |
-| **Couche 1**                    | Linear(22 → 256)  |
+| **Couche 1**                    | Linear(26 → 256)  |
 | **Couche 2**                    | Linear(256 → 256) |
 | **Couche 3 (Actor)**            | Linear(256 → 128) |
 | **Couche 4 (Actor)**            | Linear(128 → 4)   |
@@ -83,7 +105,18 @@ Output Value (1)
 ### Calculs
 
 - **Nombre de mini-batches par epoch** : 2,048 ÷ 64 = 32 batches
-- **Nombre total de passes training** : N_EPOCHS × 32 = 8 × 32 = 256 passes
+- **Nombre total de passes training** : N_EPOCHS × 32 = 8 × 32 = 256 passes par update
+
+### Reward Shaping
+
+| Evenement              | Recompense                                                          |
+| ---------------------- | ------------------------------------------------------------------- |
+| **Survie (par step)**  | +0.02                                                               |
+| **Proximite food**     | +0.1 x (prev_manhattan - new_manhattan) / CELL *(potential-based)* |
+| **Nourriture mangee**  | +10.0                                                               |
+| **Niveau complete**    | +20.0                                                               |
+| **Mort**               | -10.0 - (longueur x 0.5)                                           |
+| **Tourner en rond**    | -0.5 (penalite additionnelle)                                       |
 
 ## 🎓 Hyperparamètres d'Entraînement
 
@@ -154,10 +187,10 @@ Output Value (1)
 
 | Métrique               | Valeur                                            |
 | ---------------------- | ------------------------------------------------- |
-| **GPU/CPU**            | Auto-détection (CUDA si disponible)               |
-| **Version**            | PPO v3                                            |
-| **Config Version**     | v3 (avec reward shaping corrigé et state enrichi) |
-| **Date Type Analysis** | float32 pour observations, long pour actions      |
+| **GPU/CPU**            | Auto-détection (CUDA si disponible)                |
+| **Version**            | PPO v4                                             |
+| **Config Version**     | v4 (26 features + potential-based reward)          |
+| **Date Type Analysis** | float32 pour observations, long pour actions       |
 
 ### Corrections Apportées en V3
 
@@ -165,7 +198,15 @@ Output Value (1)
 2. **Reward Shaping** : Suppression du shaping Manhattan, ajout de récompense survie + bonus nourriture + pénalité mort
 3. **State Enrichi** : 22 features (+ longueur normalisée + urgence nourriture)
 
+### Améliorations Apportées en V4
+
+1. **State Étendu** : 22 → 26 features
+   - `food_dx_norm` / `food_dy_norm` : direction continue vers la nourriture (les features sparses [8:16] sont quasi-nulles en dehors des alignements exacts — ces 2 features corrigent ce point aveugle)
+   - `danger_front` / `danger_left` : signal binaire immédiat pour la survie à 1 case
+2. **Reward Potential-Based** : bonus de proximité à chaque step (+0.1 × Δmanhattan / CELL)
+3. **Budget Étendu** : 5M → 8M timesteps
+
 ---
 
-_Informations extraites du code : main.py, PPO.py et training_log.csv_
-_Date de génération : 2026-03-24_
+_Informations extraites du code : main.py, PPO.py_
+_Date de génération : 2026-03-26_

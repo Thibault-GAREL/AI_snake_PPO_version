@@ -37,15 +37,15 @@ This project is part of a series of **4 Snake AI implementations** using differe
 | **Paradigm** | Evolutionary | Reinforcement Learning | Reinforcement Learning | Imitation Learning |
 | **Algorithm type** | Neuroevolution | Off-policy (Q-learning) | On-policy (Actor-Critic) | Supervised (XGBoost + DAgger) |
 | **Output** | Actions [4] | Q-values [4] | Policy logits [4] + V(s) [1] | Class probabilities [4] |
-| **Input features** | 16 | 16 | 22 | 26 |
-| **Architecture** | Evolving MLP (topology changes) | MLP 16→256→128→64→4 | Actor-Critic shared trunk 22→256→256 | 1 600 boosted trees (400 × 4 classes) |
+| **Input features** | 16 | 16 | 26 | 26 |
+| **Architecture** | Evolving MLP (topology changes) | MLP 16→256→128→64→4 | Actor-Critic shared trunk 26→256→256 | 1 600 boosted trees (400 × 4 classes) |
 | **Hidden neurons / nodes** | ~28 nodes (evolves) | 448 hidden neurons | 896 hidden neurons | ~80k–200k decision nodes |
 | **Exploration** | Genetic mutations + speciation | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) | DAgger oracle (β : 0.8 → 0.05) |
 | **Memory / Buffer** | Population (100 genomes) | Experience Replay (100 000) | Rollout buffer (2 048 steps) | Supervised buffer (300 000) |
 | **Batch** | — (full population eval.) | 128 | 64 | Full dataset per round |
 | **Training time** | ~15 h | ~30–60 min (GPU) | ~6.2 h | ~12 min (GPU) |
-| **Max score** | > 20 | 13 | 21 | **43** |
-| **Mean score** | 10 | 8.55 | 10.18 | **22.77** |
+| **Max score** | > 20 | 13 | 21 *(v3)* | **43** |
+| **Mean score** | 10 | 8.55 | 10.18 *(v3)* | **22.77** |
 | **Reward signal** | ❌ (fitness only) | ✅ | ✅ | ❌ (oracle labels) |
 | **GPU support** | ❌ | ✅ | ✅ | ✅ |
 | **Sample efficiency** | 🔴 Low | 🟡 Medium | 🔴 Low | 🟢 High |
@@ -78,20 +78,20 @@ This project is part of a series of **4 Snake AI implementations** using differe
 
 ## ⚙️ How it works
 
-🕹️ The AI controls a snake on a **16×8 grid** (800×400 px). At each step, it receives a **state vector of 22 features** and outputs **policy logits for 4 actions** (UP, RIGHT, DOWN, LEFT) along with a **state value estimate**.
+🕹️ The AI controls a snake on a **16×8 grid** (800×400 px). At each step, it receives a **state vector of 26 features** and outputs **policy logits for 4 actions** (UP, RIGHT, DOWN, LEFT) along with a **state value estimate**.
 
-🧠 The network is a shared-trunk MLP (22 → 256 → 256) split into an actor head (→ 128 → 4 logits) and a critic head (→ 128 → 1 value), trained with the PPO-Clip algorithm. Advantages are estimated via GAE from the rollout buffer.
+🧠 The network is a shared-trunk MLP (26 → 256 → 256) split into an actor head (→ 128 → 4 logits) and a critic head (→ 128 → 1 value), trained with the PPO-Clip algorithm. Advantages are estimated via GAE from the rollout buffer.
 
-🎁 The reward shaping guides the agent with a survival bonus (+0.02/step), a food reward (+10), a death penalty (−10 − length×0.5), and a stagnation penalty (−0.5 if steps without food > MAX_STEPS − length×2).
+🎁 The reward shaping guides the agent with a survival bonus (+0.02/step), a **potential-based proximity reward** (proportional to the reduction in Manhattan distance to food), a food reward (+10), a death penalty (−10 − length×0.5), and a stagnation penalty (−0.5 if steps without food > MAX_STEPS − length×2).
 
 ---
 
 ## 🗺️ Network Architecture
 
 ```
-Input (22)
+Input (26)
     │
-    ├─ Linear(22 → 256) ─ LayerNorm ─ Tanh   ┐
+    ├─ Linear(26 → 256) ─ LayerNorm ─ Tanh   ┐
     └─ Linear(256 → 256) ─ LayerNorm ─ Tanh  ┘ Shared trunk
               │                    │
     ┌─────────┘                    └──────────┐
@@ -104,7 +104,7 @@ Input (22)
 ```
 
 <details>
-<summary>📋 State vector — 22 input features</summary>
+<summary>📋 State vector — 26 input features</summary>
 
 ### Distances to obstacles (8 inputs)
 
@@ -151,6 +151,22 @@ Sparse encoding : non-zero only if food is exactly aligned in that direction.
 | --- | ---------------------------------------------------------------------------------- |
 | 20  | `length_norm` — Snake length normalized : (length−1) / (MAX_CELLS−1), range [0, 1] |
 | 21  | `urgency` — Steps since last food / MAX_STEPS, range [0, 1]                        |
+
+### Continuous food direction (2 inputs) — new in v4
+
+| #   | Feature                                                                                         |
+| --- | ----------------------------------------------------------------------------------------------- |
+| 22  | `food_dx_norm` — (food.x − head.x) / WIDTH, range [−1, 1] — always non-zero, unlike [8:16]    |
+| 23  | `food_dy_norm` — (food.y − head.y) / HEIGHT, range [−1, 1] — always non-zero, unlike [8:16]   |
+
+> Features [8:16] are sparse (non-zero only when food is exactly aligned in one of 8 directions). `food_dx_norm` and `food_dy_norm` give the agent continuous food direction in **every** game state.
+
+### Immediate danger binary (2 inputs) — new in v4
+
+| #   | Feature                                                                                        |
+| --- | ---------------------------------------------------------------------------------------------- |
+| 24  | `danger_front` — 1.0 if the cell 1 step ahead (current direction) is a wall or body segment   |
+| 25  | `danger_left`  — 1.0 if the cell 1 step left (relative to current direction) is blocked       |
 
 ### Output — 4 actions
 
@@ -387,22 +403,23 @@ python xai_shap_ppo.py                                           # all plots
 | `N_EPOCHS`        | 8               | PPO epochs per update                 |
 | `BATCH_SIZE`      | 64              | Mini-batch size per gradient step     |
 | `N_STEPS`         | 2048            | Rollout length before each update     |
-| `total_timesteps` | 5 000 000       | Training budget                       |
+| `total_timesteps` | 8 000 000       | Training budget                       |
 | `hidden_size`     | 256             | Neurons in shared trunk layers        |
 
 ---
 
 ## 📈 Reward Shaping
 
-| Event                | Reward                                            |
-| -------------------- | ------------------------------------------------- |
-| Survival (each step) | +0.02                                             |
-| Food eaten           | +10.0                                             |
-| Win (grid full)      | +20.0                                             |
-| Death (wall or body) | −10.0 − length × 0.5                              |
-| Stagnation penalty   | −0.5 if `steps_since_food > MAX_STEPS − length×2` |
+| Event                | Reward                                                              |
+| -------------------- | ------------------------------------------------------------------- |
+| Survival (each step) | +0.02                                                               |
+| Food proximity       | +0.1 × (prev_manhattan − new_manhattan) / CELL *(potential-based)* |
+| Food eaten           | +10.0                                                               |
+| Win (grid full)      | +20.0                                                               |
+| Death (wall or body) | −10.0 − length × 0.5                                               |
+| Stagnation penalty   | −0.5 if `steps_since_food > MAX_STEPS − length×2`                  |
 
-The death penalty scales with snake length : losing a long snake is penalized more than losing a short one, encouraging the agent to protect its investment.
+The death penalty scales with snake length : losing a long snake is penalized more than losing a short one. The potential-based proximity reward provides dense feedback at every step — it cannot distort the optimal policy since it is grounded in a potential function (Manhattan distance to food).
 
 ---
 

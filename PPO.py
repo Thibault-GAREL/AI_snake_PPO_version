@@ -1,20 +1,23 @@
 """
-PPO.py v3
+PPO.py v4
 =========
-Corrections vs v2 :
+Améliorations vs v3 :
 
-1. LR schedule corrigé : basé sur n_updates réels (pas sur timesteps/N_STEPS)
-   → Le LR ne tombe plus à 0 après 1470 épisodes
-   → Remplacé LinearLR par CosineAnnealingLR (plus robuste aux updates irréguliers)
+1. State étendu : 22 → 26 features
+   - [22] food_dx_norm : direction relative continue vers la nourriture (axe X)
+   - [23] food_dy_norm : direction relative continue vers la nourriture (axe Y)
+     → Les features food [8:16] sont quasi-nulles en dehors des alignements exacts.
+       Ces 2 nouvelles features donnent toujours une direction vers la nourriture.
+   - [24] danger_front : obstacle immédiat dans la direction courante (binaire)
+   - [25] danger_left  : obstacle immédiat à gauche de la direction courante (binaire)
+     → Signaux binaires clairs pour la survie immédiate.
 
-2. Reward shaping corrigé :
-   - Suppression du shaping Manhattan trop "tunnel-vision"
-   - Remplacé par une récompense de survie + bonus nourriture fort
-   - Pénalité de mort relative à la longueur du serpent
-   - Pénalité de tourner en rond (steps_since_food trop élevé)
+2. Reward potential-based :
+   - Bonus de proximité : +0.1 × Δ(manhattan_nourriture) / CELL
+   - Encourage le serpent à se rapprocher de la nourriture à chaque step
+   - N'invalide pas la politique optimale (potential-based shaping)
 
-3. State enrichi : 22 features (+ longueur normalisée + urgence nourriture)
-   → Le serpent sait combien il mesure et depuis combien de temps il n'a pas mangé
+3. Budget d'entraînement étendu : 5M → 8M timesteps
 """
 
 import os
@@ -128,6 +131,24 @@ def _dist_diag(s, w, h, dx, dy):
                 d = dist
     return d
 
+# Vecteurs (front, left) pour chaque direction courante du serpent
+_DIR_VECTORS = {
+    "UP":    ((0, -1), (-1,  0)),  # front=Nord, left=Ouest
+    "RIGHT": ((1,  0), ( 0, -1)),  # front=Est,  left=Nord
+    "DOWN":  ((0,  1), ( 1,  0)),  # front=Sud,  left=Est
+    "LEFT":  ((-1, 0), ( 0,  1)),  # front=Ouest, left=Sud
+}
+
+
+def _is_dangerous(s, w, h, dx, dy):
+    """Retourne 1.0 si la cellule (head + (dx,dy)*CELL) est un mur ou un segment du corps."""
+    hx, hy = s.list_snake[0].x, s.list_snake[0].y
+    nx, ny = hx + dx * 50, hy + dy * 50
+    if not (0 <= nx < w and 0 <= ny < h):
+        return 1.0
+    return 1.0 if Snake(nx, ny) in s.list_snake else 0.0
+
+
 def _food_distances(s, f):
     hx, hy = s.list_snake[0].x, s.list_snake[0].y
     fx, fy = f.x, f.y
@@ -150,17 +171,21 @@ def _food_distances(s, f):
 
 
 # ──────────────────────────────────────────────
-# Environnement v3
+# Environnement v4
 # ──────────────────────────────────────────────
 
 class SnakeEnv:
     """
-    State (22 features) :
+    State (26 features) :
       [0:8]  distances aux dangers (N NE E SE S SW W NW), normalisées
       [8:16] distances nourriture (même 8 directions), normalisées
       [16:20] one-hot direction courante
       [20]   longueur serpent / max_length (0→1)
       [21]   urgence nourriture : steps_since_food / MAX_STEPS (0→1)
+      [22]   food_dx_norm : (food.x - head.x) / WIDTH  — direction continue vers nourriture
+      [23]   food_dy_norm : (food.y - head.y) / HEIGHT — direction continue vers nourriture
+      [24]   danger_front : 1.0 si obstacle immédiat dans la direction courante
+      [25]   danger_left  : 1.0 si obstacle immédiat à gauche de la direction courante
     """
 
     WIDTH     = 800
@@ -170,7 +195,7 @@ class SnakeEnv:
     ROWS      = HEIGHT // CELL   # 8
     MAX_CELLS = COLS * ROWS      # 128 (longueur maximale théorique)
     MAX_STEPS = 500
-    OBS_DIM   = 22               # ← +2 vs v2
+    OBS_DIM   = 26               # ← +4 vs v3
     ACT_DIM   = 4
 
     _MAX_DIST = math.sqrt(WIDTH**2 + HEIGHT**2)
@@ -189,7 +214,7 @@ class SnakeEnv:
         if render:
             pygame.init()
             self.display = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
-            pygame.display.set_caption("Snake PPO v3")
+            pygame.display.set_caption("Snake PPO v4")
             self.clock   = pygame.time.Clock()
             self.font    = pygame.font.SysFont(None, 30)
 
@@ -227,12 +252,25 @@ class SnakeEnv:
         length_norm = (s.lenght - 1) / (self.MAX_CELLS - 1)
         urgency     = min(self._steps_since_food / self.MAX_STEPS, 1.0)
 
+        # [22-23] Direction continue vers la nourriture (non-sparse, toujours informative)
+        food_dx = (f.x - s.list_snake[0].x) / w
+        food_dy = (f.y - s.list_snake[0].y) / h
+
+        # [24-25] Danger binaire immédiat dans la direction courante et à gauche
+        (fdx, fdy), (ldx, ldy) = _DIR_VECTORS[s.direction]
+        d_front = _is_dangerous(s, w, h, fdx, fdy)
+        d_left  = _is_dangerous(s, w, h, ldx, ldy)
+
         raw = np.array([
-            dn, dne, de, dse, ds, dsw, dw, dnw,
-            fn, fne, fe, fse, fsm, fsw, fw, fnw,
-            *dir_oh,
-            length_norm,
-            urgency,
+            dn, dne, de, dse, ds, dsw, dw, dnw,   # [0:8]  danger distances
+            fn, fne, fe, fse, fsm, fsw, fw, fnw,   # [8:16] food distances sparse
+            *dir_oh,                                # [16:20] direction one-hot
+            length_norm,                            # [20]   longueur normalisée
+            urgency,                                # [21]   urgence nourriture
+            food_dx,                                # [22]   food rel x (continu)
+            food_dy,                                # [23]   food rel y (continu)
+            d_front,                                # [24]   danger devant (binaire)
+            d_left,                                 # [25]   danger à gauche (binaire)
         ], dtype=np.float32)
 
         raw[:16] /= M
@@ -258,6 +296,11 @@ class SnakeEnv:
             self._snake.direction = new_dir
 
         fx, fy = self._food.x, self._food.y
+
+        # Sauvegarde de la distance Manhattan avant le déplacement (pour le potential shaping)
+        old_hx, old_hy = self._snake.list_snake[0].x, self._snake.list_snake[0].y
+        old_manhattan   = abs(old_hx - fx) + abs(old_hy - fy)
+
         alive  = self._snake.move()
 
         if not alive:
@@ -278,8 +321,10 @@ class SnakeEnv:
                 return self._get_state(), 20.0, True, {"score": self._score}
             return self._get_state(), 10.0, False, {"score": self._score}
 
-        # Récompense de survie simple
-        reward = 0.02
+        # Récompense de survie + potential-based shaping (proximité nourriture)
+        new_manhattan = abs(nhx - fx) + abs(nhy - fy)
+        shaping = 0.1 * (old_manhattan - new_manhattan) / self.CELL
+        reward  = 0.02 + shaping
 
         # Pénalité si le serpent tourne en rond trop longtemps sans manger
         # (proportionnelle à sa longueur : plus il est long, plus c'est dangereux)
@@ -323,7 +368,7 @@ class ActorCritic(nn.Module):
     Tronc avec LayerNorm + Tanh (stable pour PPO)
     """
 
-    def __init__(self, obs_dim: int = 22, act_dim: int = 4, hidden: int = 256):
+    def __init__(self, obs_dim: int = 26, act_dim: int = 4, hidden: int = 256):
         super().__init__()
 
         self.shared = nn.Sequential(
@@ -412,7 +457,13 @@ class RolloutBuffer:
 
 class PPOAgent:
     """
-    PPO v3 — corrections clés :
+    PPO v4 — améliorations :
+
+    State enrichi 26 features (vs 22 en v3) :
+      + food_dx_norm, food_dy_norm : direction continue vers la nourriture
+      + danger_front, danger_left : danger binaire immédiat
+
+    Reward potential-based : bonus de proximité nourriture à chaque step
 
     LR schedule : CosineAnnealingLR (T_max = total_timesteps, eta_min = 1e-5)
       → Décroissance douce sur toute la durée, jamais à 0
@@ -442,7 +493,7 @@ class PPOAgent:
     BATCH_SIZE = 64
     N_STEPS    = 2048
 
-    def __init__(self, obs_dim: int = 22, act_dim: int = 4,
+    def __init__(self, obs_dim: int = 26, act_dim: int = 4,
                  hidden: int = 256, device: Optional[torch.device] = None,
                  total_timesteps: int = 3_000_000):
 
