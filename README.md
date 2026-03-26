@@ -37,8 +37,8 @@ This project is part of a series of **4 Snake AI implementations** using differe
 | **Paradigm** | Evolutionary | Reinforcement Learning | Reinforcement Learning | Imitation Learning |
 | **Algorithm type** | Neuroevolution | Off-policy (Q-learning) | On-policy (Actor-Critic) | Supervised (XGBoost + DAgger) |
 | **Output** | Actions [4] | Q-values [4] | Policy logits [4] + V(s) [1] | Class probabilities [4] |
-| **Input features** | 16 | 16 | 26 | 26 |
-| **Architecture** | Evolving MLP (topology changes) | MLP 16→256→128→64→4 | Actor-Critic shared trunk 26→256→256 | 1 600 boosted trees (400 × 4 classes) |
+| **Input features** | 16 | 16 | 28 | 26 |
+| **Architecture** | Evolving MLP (topology changes) | MLP 16→256→128→64→4 | Actor-Critic shared trunk 28→256→256 | 1 600 boosted trees (400 × 4 classes) |
 | **Hidden neurons / nodes** | ~28 nodes (evolves) | 448 hidden neurons | 896 hidden neurons | ~80k–200k decision nodes |
 | **Exploration** | Genetic mutations + speciation | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) | DAgger oracle (β : 0.8 → 0.05) |
 | **Memory / Buffer** | Population (100 genomes) | Experience Replay (100 000) | Rollout buffer (2 048 steps) | Supervised buffer (300 000) |
@@ -74,13 +74,15 @@ This project is part of a series of **4 Snake AI implementations** using differe
 
 📊 **Full XAI suite** — 4 independent analysis scripts adapted for actor-critic
 
+📐 **Unified 28-feature state** — shared across all 4 Snake AI projects (see [input.md](input.md))
+
 ---
 
 ## ⚙️ How it works
 
-🕹️ The AI controls a snake on a **16×8 grid** (800×400 px). At each step, it receives a **state vector of 26 features** and outputs **policy logits for 4 actions** (UP, RIGHT, DOWN, LEFT) along with a **state value estimate**.
+🕹️ The AI controls a snake on a **16×8 grid** (800×400 px). At each step, it receives a **unified state vector of 28 features** (see [input.md](input.md)) and outputs **policy logits for 4 actions** (UP, RIGHT, DOWN, LEFT) along with a **state value estimate**.
 
-🧠 The network is a shared-trunk MLP (26 → 256 → 256) split into an actor head (→ 128 → 4 logits) and a critic head (→ 128 → 1 value), trained with the PPO-Clip algorithm. Advantages are estimated via GAE from the rollout buffer.
+🧠 The network is a shared-trunk MLP (28 → 256 → 256) split into an actor head (→ 128 → 4 logits) and a critic head (→ 128 → 1 value), trained with the PPO-Clip algorithm. Advantages are estimated via GAE from the rollout buffer.
 
 🎁 The reward shaping guides the agent with a survival bonus (+0.02/step), a **potential-based proximity reward** (proportional to the reduction in Manhattan distance to food), a food reward (+10), a death penalty (−10 − length×0.5), and a stagnation penalty (−0.5 if steps without food > MAX_STEPS − length×2).
 
@@ -89,9 +91,9 @@ This project is part of a series of **4 Snake AI implementations** using differe
 ## 🗺️ Network Architecture
 
 ```
-Input (26)
+Input (28)
     │
-    ├─ Linear(26 → 256) ─ LayerNorm ─ Tanh   ┐
+    ├─ Linear(28 → 256) ─ LayerNorm ─ Tanh   ┐
     └─ Linear(256 → 256) ─ LayerNorm ─ Tanh  ┘ Shared trunk
               │                    │
     ┌─────────┘                    └──────────┐
@@ -104,69 +106,73 @@ Input (26)
 ```
 
 <details>
-<summary>📋 State vector — 26 input features</summary>
+<summary>📋 Unified state vector — 28 input features (see input.md)</summary>
 
-### Distances to obstacles (8 inputs)
+### Group 1 — Danger distances (8 inputs)
 
-| #   | Feature                                               |
-| --- | ----------------------------------------------------- |
-| 0   | `danger_N` — Distance to nearest obstacle North       |
-| 1   | `danger_NE` — Distance to nearest obstacle North-East |
-| 2   | `danger_E` — Distance to nearest obstacle East        |
-| 3   | `danger_SE` — Distance to nearest obstacle South-East |
-| 4   | `danger_S` — Distance to nearest obstacle South       |
-| 5   | `danger_SW` — Distance to nearest obstacle South-West |
-| 6   | `danger_W` — Distance to nearest obstacle West        |
-| 7   | `danger_NW` — Distance to nearest obstacle North-West |
+Distance to nearest obstacle (wall or body) in 8 directions, normalized by `sqrt(WIDTH² + HEIGHT²)` → [0, 1].
 
-All normalized by `√(WIDTH² + HEIGHT²)` → [0, 1]
+| #   | Feature                                                     |
+| --- | ----------------------------------------------------------- |
+| 0   | `distance_danger_N` — Distance to nearest obstacle North    |
+| 1   | `distance_danger_NE` — Distance to nearest obstacle NE      |
+| 2   | `distance_danger_E` — Distance to nearest obstacle East     |
+| 3   | `distance_danger_SE` — Distance to nearest obstacle SE      |
+| 4   | `distance_danger_S` — Distance to nearest obstacle South    |
+| 5   | `distance_danger_SW` — Distance to nearest obstacle SW      |
+| 6   | `distance_danger_W` — Distance to nearest obstacle West     |
+| 7   | `distance_danger_NW` — Distance to nearest obstacle NW      |
 
-### Distances to food (8 inputs)
+### Group 2 — Food distances, sparse (8 inputs)
 
-| #   | Feature                                            |
-| --- | -------------------------------------------------- |
-| 8   | `food_N` — Distance to food if aligned North       |
-| 9   | `food_NE` — Distance to food if aligned North-East |
-| 10  | `food_E` — Distance to food if aligned East        |
-| 11  | `food_SE` — Distance to food if aligned South-East |
-| 12  | `food_S` — Distance to food if aligned South       |
-| 13  | `food_SW` — Distance to food if aligned South-West |
-| 14  | `food_W` — Distance to food if aligned West        |
-| 15  | `food_NW` — Distance to food if aligned North-West |
+Distance to food in 8 directions. **Sparse** : non-zero only when food is exactly aligned. Normalized by `max_dist`.
 
-Sparse encoding : non-zero only if food is exactly aligned in that direction.
+| #   | Feature                                              |
+| --- | ---------------------------------------------------- |
+| 8   | `distance_food_N` — Distance to food if aligned N    |
+| 9   | `distance_food_NE` — Distance to food if aligned NE  |
+| 10  | `distance_food_E` — Distance to food if aligned E    |
+| 11  | `distance_food_SE` — Distance to food if aligned SE  |
+| 12  | `distance_food_S` — Distance to food if aligned S    |
+| 13  | `distance_food_SW` — Distance to food if aligned SW  |
+| 14  | `distance_food_W` — Distance to food if aligned W    |
+| 15  | `distance_food_NW` — Distance to food if aligned NW  |
 
-### Direction one-hot (4 inputs)
+### Group 3 — Food direction, continuous (2 inputs)
+
+**Always non-zero** — solves the blind spot of sparse features [8:15] which are zero ~80% of the time.
+
+| #   | Feature                                                          |
+| --- | ---------------------------------------------------------------- |
+| 16  | `food_delta_x` — (food.x − head.x) / WIDTH, range [−1, 1]      |
+| 17  | `food_delta_y` — (food.y − head.y) / HEIGHT, range [−1, 1]     |
+
+### Group 4 — Immediate danger, binary (4 inputs)
+
+**Absolute** (N/E/S/W), not relative to the snake's direction. 1.0 if wall or body 1 cell away.
+
+| #   | Feature                                     |
+| --- | ------------------------------------------- |
+| 18  | `danger_N` — Obstacle 1 cell North          |
+| 19  | `danger_E` — Obstacle 1 cell East           |
+| 20  | `danger_S` — Obstacle 1 cell South          |
+| 21  | `danger_W` — Obstacle 1 cell West           |
+
+### Group 5 — Direction one-hot (4 inputs)
 
 | #   | Feature                                       |
 | --- | --------------------------------------------- |
-| 16  | `dir_UP` — 1 if current direction is UP       |
-| 17  | `dir_RIGHT` — 1 if current direction is RIGHT |
-| 18  | `dir_DOWN` — 1 if current direction is DOWN   |
-| 19  | `dir_LEFT` — 1 if current direction is LEFT   |
+| 22  | `dir_UP` — 1 if current direction is UP       |
+| 23  | `dir_RIGHT` — 1 if current direction is RIGHT |
+| 24  | `dir_DOWN` — 1 if current direction is DOWN   |
+| 25  | `dir_LEFT` — 1 if current direction is LEFT   |
 
-### Contextual features (2 inputs)
+### Group 6 — Temporal context (2 inputs)
 
-| #   | Feature                                                                            |
-| --- | ---------------------------------------------------------------------------------- |
-| 20  | `length_norm` — Snake length normalized : (length−1) / (MAX_CELLS−1), range [0, 1] |
-| 21  | `urgency` — Steps since last food / MAX_STEPS, range [0, 1]                        |
-
-### Continuous food direction (2 inputs) — new in v4
-
-| #   | Feature                                                                                         |
-| --- | ----------------------------------------------------------------------------------------------- |
-| 22  | `food_dx_norm` — (food.x − head.x) / WIDTH, range [−1, 1] — always non-zero, unlike [8:16]    |
-| 23  | `food_dy_norm` — (food.y − head.y) / HEIGHT, range [−1, 1] — always non-zero, unlike [8:16]   |
-
-> Features [8:16] are sparse (non-zero only when food is exactly aligned in one of 8 directions). `food_dx_norm` and `food_dy_norm` give the agent continuous food direction in **every** game state.
-
-### Immediate danger binary (2 inputs) — new in v4
-
-| #   | Feature                                                                                        |
-| --- | ---------------------------------------------------------------------------------------------- |
-| 24  | `danger_front` — 1.0 if the cell 1 step ahead (current direction) is a wall or body segment   |
-| 25  | `danger_left`  — 1.0 if the cell 1 step left (relative to current direction) is blocked       |
+| #   | Feature                                                                             |
+| --- | ----------------------------------------------------------------------------------- |
+| 26  | `length_norm` — Snake length normalized : (length−1) / (MAX_CELLS−1), range [0, 1] |
+| 27  | `urgency` — Steps since last food / MAX_STEPS, range [0, 1]                        |
 
 ### Output — 4 actions
 
@@ -183,7 +189,7 @@ Sparse encoding : non-zero only if food is exactly aligned in that direction.
 
 ## 🔬 Explainable AI (XAI) Suite
 
-Four dedicated scripts analyze the PPO actor-critic model from different angles, adapted from the DQN XAI suite to handle the new architecture (Tanh activations, 22 features, policy probabilities instead of Q-values) :
+Four dedicated scripts analyze the PPO actor-critic model from different angles, adapted from the DQN XAI suite to handle the new architecture (Tanh activations, 28 features, policy probabilities instead of Q-values) :
 
 | Script                   | Analysis                                                                               | Output                 |
 | ------------------------ | -------------------------------------------------------------------------------------- | ---------------------- |
@@ -196,7 +202,7 @@ Four dedicated scripts analyze the PPO actor-critic model from different angles,
 >
 > - **No dead neurons** : Tanh never outputs exactly 0. Replaced by _saturation_ analysis (|act| > 0.99)
 > - **No Q-values** : replaced by `softmax(logits)` → policy probabilities P(action) and critic value V(s)
-> - **22 features** split into 4 color-coded categories : 🔵 danger / 🟠 food / 🟢 direction / 🩷 context
+> - **28 features** split into 6 groups : 🔵 danger distances / 🟠 food sparse / 🟡 food delta / 🔴 danger binary / 🟢 direction / 🩷 context
 > - **SHAP** : wrapped in `ActorWrapper` to expose only the actor logits to `DeepExplainer`
 
 <details>
@@ -312,6 +318,7 @@ _4 views : |SHAP|×action (absolute importance), signed SHAP×action (direction 
 ├── xai_activations_ppo.py      # XAI — Internal activations (Tanh layers)
 ├── xai_shap_ppo.py             # XAI — SHAP explanations (ActorWrapper)
 │
+├── input.md                    # Unified 28-feature state specification
 ├── model_best.pth              # Best model checkpoint (rolling mean 50 ep.)
 ├── model_last.pth              # Final model checkpoint
 ├── training_log.csv            # Per-episode training metrics

@@ -61,7 +61,7 @@ def train(args):
     print(f"  Snake PPO v4 — Entraînement")
     print(f"  Device     : {device}")
     print(f"  Steps max  : {args.timesteps:,}")
-    print(f"  OBS dim    : {SnakeEnv.OBS_DIM}  (distances + direction + longueur + urgence + food_xy + danger_binary)")
+    print(f"  OBS dim    : {SnakeEnv.OBS_DIM}  (unified 28-feature state — see input.md)")
     print("=" * 65)
 
     agent = PPOAgent(

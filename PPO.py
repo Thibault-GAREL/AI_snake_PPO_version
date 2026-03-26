@@ -1,23 +1,20 @@
 """
 PPO.py v4
 =========
-Améliorations vs v3 :
+Unified 28-feature state (see input.md for full specification) :
 
-1. State étendu : 22 → 26 features
-   - [22] food_dx_norm : direction relative continue vers la nourriture (axe X)
-   - [23] food_dy_norm : direction relative continue vers la nourriture (axe Y)
-     → Les features food [8:16] sont quasi-nulles en dehors des alignements exacts.
-       Ces 2 nouvelles features donnent toujours une direction vers la nourriture.
-   - [24] danger_front : obstacle immédiat dans la direction courante (binaire)
-   - [25] danger_left  : obstacle immédiat à gauche de la direction courante (binaire)
-     → Signaux binaires clairs pour la survie immédiate.
+  [0:8]   danger distances (N NE E SE S SW W NW)  — normalized
+  [8:16]  food distances sparse (8 dirs)           — normalized
+  [16:17] food_delta_x, food_delta_y               — continuous, always non-zero
+  [18:21] danger_N, danger_E, danger_S, danger_W   — binary immediate (absolute)
+  [22:25] direction one-hot (UP RIGHT DOWN LEFT)
+  [26]    length_norm
+  [27]    urgency
 
-2. Reward potential-based :
-   - Bonus de proximité : +0.1 × Δ(manhattan_nourriture) / CELL
-   - Encourage le serpent à se rapprocher de la nourriture à chaque step
-   - N'invalide pas la politique optimale (potential-based shaping)
+Reward potential-based :
+  +0.1 × Δ(manhattan_to_food) / CELL per step
 
-3. Budget d'entraînement étendu : 5M → 8M timesteps
+Budget : 8M timesteps
 """
 
 import os
@@ -131,22 +128,20 @@ def _dist_diag(s, w, h, dx, dy):
                 d = dist
     return d
 
-# Vecteurs (front, left) pour chaque direction courante du serpent
-_DIR_VECTORS = {
-    "UP":    ((0, -1), (-1,  0)),  # front=Nord, left=Ouest
-    "RIGHT": ((1,  0), ( 0, -1)),  # front=Est,  left=Nord
-    "DOWN":  ((0,  1), ( 1,  0)),  # front=Sud,  left=Est
-    "LEFT":  ((-1, 0), ( 0,  1)),  # front=Ouest, left=Sud
-}
-
-
-def _is_dangerous(s, w, h, dx, dy):
-    """Retourne 1.0 si la cellule (head + (dx,dy)*CELL) est un mur ou un segment du corps."""
+def _danger_binary(s, w, h):
+    """Retourne 4 signaux binaires : danger immédiat à 1 case en N, E, S, W (absolu)."""
     hx, hy = s.list_snake[0].x, s.list_snake[0].y
-    nx, ny = hx + dx * 50, hy + dy * 50
-    if not (0 <= nx < w and 0 <= ny < h):
-        return 1.0
-    return 1.0 if Snake(nx, ny) in s.list_snake else 0.0
+    cell = 50
+    results = []
+    for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:  # N, E, S, W
+        nx, ny = hx + dx * cell, hy + dy * cell
+        if not (0 <= nx < w and 0 <= ny < h):
+            results.append(1.0)
+        elif Snake(nx, ny) in s.list_snake:
+            results.append(1.0)
+        else:
+            results.append(0.0)
+    return results  # [danger_N, danger_E, danger_S, danger_W]
 
 
 def _food_distances(s, f):
@@ -176,16 +171,15 @@ def _food_distances(s, f):
 
 class SnakeEnv:
     """
-    State (26 features) :
-      [0:8]  distances aux dangers (N NE E SE S SW W NW), normalisées
-      [8:16] distances nourriture (même 8 directions), normalisées
-      [16:20] one-hot direction courante
-      [20]   longueur serpent / max_length (0→1)
-      [21]   urgence nourriture : steps_since_food / MAX_STEPS (0→1)
-      [22]   food_dx_norm : (food.x - head.x) / WIDTH  — direction continue vers nourriture
-      [23]   food_dy_norm : (food.y - head.y) / HEIGHT — direction continue vers nourriture
-      [24]   danger_front : 1.0 si obstacle immédiat dans la direction courante
-      [25]   danger_left  : 1.0 si obstacle immédiat à gauche de la direction courante
+    Unified state (28 features — see input.md) :
+      [0:8]   distances danger (N NE E SE S SW W NW), normalisées
+      [8:16]  distances food sparse (8 dirs), normalisées
+      [16]    food_delta_x : (food.x - head.x) / WIDTH   ∈ [-1, 1]
+      [17]    food_delta_y : (food.y - head.y) / HEIGHT   ∈ [-1, 1]
+      [18:22] danger binaire immédiat N, E, S, W (absolu) ∈ {0, 1}
+      [22:26] direction one-hot (UP RIGHT DOWN LEFT)
+      [26]    length_norm ∈ [0, 1]
+      [27]    urgency     ∈ [0, 1]
     """
 
     WIDTH     = 800
@@ -195,11 +189,11 @@ class SnakeEnv:
     ROWS      = HEIGHT // CELL   # 8
     MAX_CELLS = COLS * ROWS      # 128 (longueur maximale théorique)
     MAX_STEPS = 500
-    OBS_DIM   = 26               # ← +4 vs v3
+    OBS_DIM   = 28               # unified 28-feature state
     ACT_DIM   = 4
 
     _MAX_DIST = math.sqrt(WIDTH**2 + HEIGHT**2)
-    _DIR_IDX  = {"UP": 0, "RIGHT": 1, "DOWN": 2, "LEFT": 3}
+    _DIR_IDX  = {"UP": 0, "RIGHT": 1, "DOWN": 2, "LEFT": 3}  # one-hot index
 
     def __init__(self, render: bool = False):
         self.render_mode     = render
@@ -246,31 +240,30 @@ class SnakeEnv:
 
         fn, fne, fe, fse, fsm, fsw, fw, fnw = _food_distances(s, f)
 
-        dir_oh = [0.0, 0.0, 0.0, 0.0]
-        dir_oh[self._DIR_IDX[s.direction]] = 1.0
-
-        length_norm = (s.lenght - 1) / (self.MAX_CELLS - 1)
-        urgency     = min(self._steps_since_food / self.MAX_STEPS, 1.0)
-
-        # [22-23] Direction continue vers la nourriture (non-sparse, toujours informative)
+        # [16-17] Direction continue vers la nourriture
         food_dx = (f.x - s.list_snake[0].x) / w
         food_dy = (f.y - s.list_snake[0].y) / h
 
-        # [24-25] Danger binaire immédiat dans la direction courante et à gauche
-        (fdx, fdy), (ldx, ldy) = _DIR_VECTORS[s.direction]
-        d_front = _is_dangerous(s, w, h, fdx, fdy)
-        d_left  = _is_dangerous(s, w, h, ldx, ldy)
+        # [18-21] Danger binaire immédiat N, E, S, W (absolu)
+        danger_nesw = _danger_binary(s, w, h)
+
+        # [22-25] Direction one-hot
+        dir_oh = [0.0, 0.0, 0.0, 0.0]
+        dir_oh[self._DIR_IDX[s.direction]] = 1.0
+
+        # [26-27] Contexte temporel
+        length_norm = (s.lenght - 1) / (self.MAX_CELLS - 1)
+        urgency     = min(self._steps_since_food / self.MAX_STEPS, 1.0)
 
         raw = np.array([
-            dn, dne, de, dse, ds, dsw, dw, dnw,   # [0:8]  danger distances
-            fn, fne, fe, fse, fsm, fsw, fw, fnw,   # [8:16] food distances sparse
-            *dir_oh,                                # [16:20] direction one-hot
-            length_norm,                            # [20]   longueur normalisée
-            urgency,                                # [21]   urgence nourriture
-            food_dx,                                # [22]   food rel x (continu)
-            food_dy,                                # [23]   food rel y (continu)
-            d_front,                                # [24]   danger devant (binaire)
-            d_left,                                 # [25]   danger à gauche (binaire)
+            dn, dne, de, dse, ds, dsw, dw, dnw,   # [0:8]   danger distances
+            fn, fne, fe, fse, fsm, fsw, fw, fnw,   # [8:16]  food distances sparse
+            food_dx,                                # [16]    food_delta_x (continu)
+            food_dy,                                # [17]    food_delta_y (continu)
+            *danger_nesw,                           # [18:22] danger_N, E, S, W (binaire)
+            *dir_oh,                                # [22:26] direction one-hot
+            length_norm,                            # [26]    longueur normalisée
+            urgency,                                # [27]    urgence nourriture
         ], dtype=np.float32)
 
         raw[:16] /= M
@@ -359,16 +352,16 @@ class SnakeEnv:
 
 
 # ──────────────────────────────────────────────
-# Réseau Actor-Critic v3
+# Réseau Actor-Critic v4
 # ──────────────────────────────────────────────
 
 class ActorCritic(nn.Module):
     """
-    22 → 256 → 256 → (4 logits | 1 valeur)
+    28 → 256 → 256 → (4 logits | 1 valeur)
     Tronc avec LayerNorm + Tanh (stable pour PPO)
     """
 
-    def __init__(self, obs_dim: int = 26, act_dim: int = 4, hidden: int = 256):
+    def __init__(self, obs_dim: int = 28, act_dim: int = 4, hidden: int = 256):
         super().__init__()
 
         self.shared = nn.Sequential(
@@ -452,16 +445,17 @@ class RolloutBuffer:
 
 
 # ──────────────────────────────────────────────
-# Agent PPO v3
+# Agent PPO v4
 # ──────────────────────────────────────────────
 
 class PPOAgent:
     """
-    PPO v4 — améliorations :
+    PPO v4 — unified 28-feature state (see input.md)
 
-    State enrichi 26 features (vs 22 en v3) :
-      + food_dx_norm, food_dy_norm : direction continue vers la nourriture
-      + danger_front, danger_left : danger binaire immédiat
+    State 28 features :
+      + food_delta_x/y : direction continue vers la nourriture
+      + danger_N/E/S/W : danger binaire immédiat (absolu, 4 directions cardinales)
+      + length_norm, urgency : contexte temporel
 
     Reward potential-based : bonus de proximité nourriture à chaque step
 
@@ -493,14 +487,14 @@ class PPOAgent:
     BATCH_SIZE = 64
     N_STEPS    = 2048
 
-    def __init__(self, obs_dim: int = 26, act_dim: int = 4,
+    def __init__(self, obs_dim: int = 28, act_dim: int = 4,
                  hidden: int = 256, device: Optional[torch.device] = None,
                  total_timesteps: int = 3_000_000):
 
         self.device = device or torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        print(f"[PPO v3] Device : {self.device}")
+        print(f"[PPO v4] Device : {self.device}")
 
         self.net   = ActorCritic(obs_dim, act_dim, hidden).to(self.device)
         self.optim = optim.Adam(self.net.parameters(), lr=self.LR, eps=1e-5)
@@ -585,7 +579,7 @@ class PPOAgent:
             "sched_state" : self.scheduler.state_dict(),
             "n_updates"   : self._n_updates,
         }, path)
-        print(f"[PPO v3] Sauvegardé → {path}")
+        print(f"[PPO v4] Sauvegardé → {path}")
 
     def load(self, path: str):
         if not os.path.exists(path):
@@ -596,4 +590,4 @@ class PPOAgent:
         if "sched_state" in ckpt:
             self.scheduler.load_state_dict(ckpt["sched_state"])
         self._n_updates = ckpt.get("n_updates", 0)
-        print(f"[PPO v3] Chargé ← {path}  (updates : {self._n_updates})")
+        print(f"[PPO v4] Chargé ← {path}  (updates : {self._n_updates})")

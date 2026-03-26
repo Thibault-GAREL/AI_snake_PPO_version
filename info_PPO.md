@@ -47,21 +47,20 @@ Quatre analyses XAI ont été menées sur le modèle PPO V2 entraîné afin d'en
 
 ### Entrée (État)
 
-- **Dimension d'entrée** : 26 features *(+4 vs v3)*
+- **Dimension d'entrée** : 28 features (unified — voir `input.md`)
   - [0:8]   Distances aux dangers (N, NE, E, SE, S, SW, W, NW) normalisées
-  - [8:16]  Distances nourriture (même 8 directions) normalisées — *sparses*
-  - [16:20] One-hot encoding direction courante (UP, RIGHT, DOWN, LEFT)
-  - [20]    Longueur serpent normalisée (0→1)
-  - [21]    Urgence nourriture (steps_since_food / MAX_STEPS)
-  - **[22]  food_dx_norm** : (food.x − head.x) / WIDTH — direction continue vers nourriture *(nouveau)*
-  - **[23]  food_dy_norm** : (food.y − head.y) / HEIGHT — direction continue vers nourriture *(nouveau)*
-  - **[24]  danger_front** : 1.0 si obstacle à 1 case devant (binaire) *(nouveau)*
-  - **[25]  danger_left**  : 1.0 si obstacle à 1 case à gauche (binaire) *(nouveau)*
+  - [8:16]  Distances nourriture (même 8 directions) normalisées — sparses
+  - [16]    `food_delta_x` : (food.x - head.x) / WIDTH — direction continue
+  - [17]    `food_delta_y` : (food.y - head.y) / HEIGHT — direction continue
+  - [18:22] `danger_N/E/S/W` : danger binaire immédiat, absolu (4 directions cardinales)
+  - [22:26] One-hot encoding direction courante (UP, RIGHT, DOWN, LEFT)
+  - [26]    Longueur serpent normalisée (0→1)
+  - [27]    Urgence nourriture (steps_since_food / MAX_STEPS)
 
 ### Réseau Acteur (Policy Network)
 
 ```
-Input (26)
+Input (28)
   ↓ Linear + LayerNorm + Tanh
 Hidden (256)
   ↓ Linear + LayerNorm + Tanh
@@ -86,7 +85,7 @@ Output Value (1)
 
 | Paramètre                       | Valeur            |
 | ------------------------------- | ----------------- |
-| **Couche 1**                    | Linear(26 → 256)  |
+| **Couche 1**                    | Linear(28 → 256)  |
 | **Couche 2**                    | Linear(256 → 256) |
 | **Couche 3 (Actor)**            | Linear(256 → 128) |
 | **Couche 4 (Actor)**            | Linear(128 → 4)   |
@@ -200,9 +199,10 @@ Output Value (1)
 
 ### Améliorations Apportées en V4
 
-1. **State Étendu** : 22 → 26 features
-   - `food_dx_norm` / `food_dy_norm` : direction continue vers la nourriture (les features sparses [8:16] sont quasi-nulles en dehors des alignements exacts — ces 2 features corrigent ce point aveugle)
-   - `danger_front` / `danger_left` : signal binaire immédiat pour la survie à 1 case
+1. **Unified 28-feature state** (voir `input.md`) :
+   - `food_delta_x` / `food_delta_y` : direction continue vers la nourriture (les features sparses [8:16] sont quasi-nulles en dehors des alignements exacts)
+   - `danger_N/E/S/W` : 4 signaux binaires absolus de danger immédiat (remplace danger_front/left relatifs)
+   - `length_norm` / `urgency` : contexte temporel
 2. **Reward Potential-Based** : bonus de proximité à chaque step (+0.1 × Δmanhattan / CELL)
 3. **Budget Étendu** : 5M → 8M timesteps
 
