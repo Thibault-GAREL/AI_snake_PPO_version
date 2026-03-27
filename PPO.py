@@ -1,6 +1,6 @@
 """
-PPO.py v4
-=========
+PPO.py v4 — Vectorized
+=======================
 Unified 28-feature state (see input.md for full specification) :
 
   [0:8]   danger distances (N NE E SE S SW W NW)  — normalized
@@ -11,10 +11,7 @@ Unified 28-feature state (see input.md for full specification) :
   [26]    length_norm
   [27]    urgency
 
-Reward potential-based :
-  +0.1 × Δ(manhattan_to_food) / CELL per step
-
-Budget : 8M timesteps
+Vectorized training with N_ENVS parallel environments.
 """
 
 import os
@@ -166,7 +163,7 @@ def _food_distances(s, f):
 
 
 # ──────────────────────────────────────────────
-# Environnement v4
+# Environnement v4 (single)
 # ──────────────────────────────────────────────
 
 class SnakeEnv:
@@ -320,7 +317,6 @@ class SnakeEnv:
         reward  = 0.02 + shaping
 
         # Pénalité si le serpent tourne en rond trop longtemps sans manger
-        # (proportionnelle à sa longueur : plus il est long, plus c'est dangereux)
         max_allowed = self.MAX_STEPS - self._snake.lenght * 2
         if self._steps_since_food > max_allowed:
             reward -= 0.5
@@ -349,6 +345,136 @@ class SnakeEnv:
     def close(self):
         if self.render_mode:
             pygame.quit()
+
+
+# ──────────────────────────────────────────────
+# Vectorized Environment (N envs en parallèle)
+# ──────────────────────────────────────────────
+
+class VecSnakeEnv:
+    """Wraps N SnakeEnv instances with auto-reset on done."""
+
+    def __init__(self, n_envs: int = 8):
+        self.n_envs = n_envs
+        self.envs   = [SnakeEnv(render=False) for _ in range(n_envs)]
+
+    def reset(self) -> np.ndarray:
+        """Returns (n_envs, OBS_DIM) array."""
+        obs = np.stack([env.reset() for env in self.envs])
+        return obs
+
+    def step(self, actions: np.ndarray):
+        """
+        actions: (n_envs,) int array
+        Returns: obs (n_envs, OBS_DIM), rewards (n_envs,), dones (n_envs,), infos list[dict]
+
+        Auto-resets done envs. Returned obs is the NEW episode obs for done envs.
+        infos[i]["terminal_score"] is set when env i was done (before reset).
+        """
+        obs_list     = []
+        rewards      = np.zeros(self.n_envs, dtype=np.float32)
+        dones        = np.zeros(self.n_envs, dtype=np.float32)
+        infos        = [{} for _ in range(self.n_envs)]
+
+        for i, (env, act) in enumerate(zip(self.envs, actions)):
+            ob, rew, done, info = env.step(int(act))
+            rewards[i] = rew
+            dones[i]   = float(done)
+            infos[i]   = info
+
+            if done:
+                infos[i]["terminal_score"] = info["score"]
+                ob = env.reset()  # auto-reset
+
+            obs_list.append(ob)
+
+        obs = np.stack(obs_list)
+        return obs, rewards, dones, infos
+
+    def close(self):
+        for env in self.envs:
+            env.close()
+
+
+# ──────────────────────────────────────────────
+# Vectorized Rollout Buffer
+# ──────────────────────────────────────────────
+
+class VecRolloutBuffer:
+    """Fixed-size buffer for vectorized PPO collection."""
+
+    def __init__(self, n_steps: int, n_envs: int, obs_dim: int):
+        self.n_steps = n_steps
+        self.n_envs  = n_envs
+        self.obs_dim = obs_dim
+
+        self.obs       = np.zeros((n_steps, n_envs, obs_dim), dtype=np.float32)
+        self.actions   = np.zeros((n_steps, n_envs),          dtype=np.int64)
+        self.log_probs = np.zeros((n_steps, n_envs),          dtype=np.float32)
+        self.rewards   = np.zeros((n_steps, n_envs),          dtype=np.float32)
+        self.values    = np.zeros((n_steps, n_envs),          dtype=np.float32)
+        self.dones     = np.zeros((n_steps, n_envs),          dtype=np.float32)
+        self.ptr       = 0
+
+    def push(self, obs, actions, log_probs, rewards, values, dones):
+        """Store one timestep for all envs."""
+        self.obs[self.ptr]       = obs
+        self.actions[self.ptr]   = actions
+        self.log_probs[self.ptr] = log_probs
+        self.rewards[self.ptr]   = rewards
+        self.values[self.ptr]    = values
+        self.dones[self.ptr]     = dones
+        self.ptr += 1
+
+    def is_full(self) -> bool:
+        return self.ptr >= self.n_steps
+
+    def reset(self):
+        self.ptr = 0
+
+    def compute_returns_advantages(self, last_values: np.ndarray, last_dones: np.ndarray,
+                                    gamma: float, gae_lambda: float, device: torch.device):
+        """
+        Per-env GAE computation, then flatten to (n_steps * n_envs, ...).
+        last_values: (n_envs,), last_dones: (n_envs,)
+        """
+        advantages = np.zeros((self.n_steps, self.n_envs), dtype=np.float32)
+        gae = np.zeros(self.n_envs, dtype=np.float32)
+
+        # Bootstrap from last step
+        next_values = last_values
+        next_dones  = last_dones
+
+        for t in reversed(range(self.n_steps)):
+            delta = self.rewards[t] + gamma * next_values * (1 - self.dones[t]) - self.values[t]
+            gae   = delta + gamma * gae_lambda * (1 - self.dones[t]) * gae
+            advantages[t] = gae
+            next_values = self.values[t]
+            # Note: dones[t] already handled in delta, no need to reset gae on done
+            # because the done mask in delta + gae formula handles it correctly
+
+        returns = advantages + self.values
+
+        # Flatten (n_steps, n_envs) → (n_steps * n_envs)
+        n = self.n_steps * self.n_envs
+        obs_flat  = self.obs.reshape(n, self.obs_dim)
+        act_flat  = self.actions.reshape(n)
+        lp_flat   = self.log_probs.reshape(n)
+        val_flat  = self.values.reshape(n)
+        adv_flat  = advantages.reshape(n)
+        ret_flat  = returns.reshape(n)
+
+        # Normalize advantages
+        adv_flat = (adv_flat - adv_flat.mean()) / (adv_flat.std() + 1e-8)
+
+        obs_t = torch.tensor(obs_flat, dtype=torch.float32, device=device)
+        act_t = torch.tensor(act_flat, dtype=torch.long,    device=device)
+        lp_t  = torch.tensor(lp_flat,  dtype=torch.float32, device=device)
+        val_t = torch.tensor(val_flat, dtype=torch.float32, device=device)
+        adv_t = torch.tensor(adv_flat, dtype=torch.float32, device=device)
+        ret_t = torch.tensor(ret_flat, dtype=torch.float32, device=device)
+
+        return obs_t, act_t, lp_t, val_t, adv_t, ret_t
 
 
 # ──────────────────────────────────────────────
@@ -402,94 +528,42 @@ class ActorCritic(nn.Module):
 
 
 # ──────────────────────────────────────────────
-# Buffer de rollout
-# ──────────────────────────────────────────────
-
-class RolloutBuffer:
-    def __init__(self):
-        self.obs:       List[np.ndarray] = []
-        self.actions:   List[int]        = []
-        self.log_probs: List[float]      = []
-        self.rewards:   List[float]      = []
-        self.values:    List[float]      = []
-        self.dones:     List[bool]       = []
-
-    def push(self, obs, action, log_prob, reward, value, done):
-        self.obs.append(obs); self.actions.append(action)
-        self.log_probs.append(log_prob); self.rewards.append(reward)
-        self.values.append(value); self.dones.append(done)
-
-    def clear(self): self.__init__()
-    def __len__(self): return len(self.rewards)
-
-    def compute_returns_advantages(self, last_value, gamma, gae_lambda, device):
-        n   = len(self.rewards)
-        adv = np.zeros(n, dtype=np.float32)
-        gae = 0.0
-        v   = np.array(self.values + [last_value], dtype=np.float32)
-        d   = np.array(self.dones,                 dtype=np.float32)
-
-        for t in reversed(range(n)):
-            delta  = self.rewards[t] + gamma * v[t+1] * (1 - d[t]) - v[t]
-            gae    = delta + gamma * gae_lambda * (1 - d[t]) * gae
-            adv[t] = gae
-
-        ret   = adv + np.array(self.values, dtype=np.float32)
-        obs_t = torch.tensor(np.array(self.obs),       dtype=torch.float32, device=device)
-        act_t = torch.tensor(np.array(self.actions),   dtype=torch.long,    device=device)
-        lp_t  = torch.tensor(np.array(self.log_probs), dtype=torch.float32, device=device)
-        adv_t = torch.tensor(adv,                      dtype=torch.float32, device=device)
-        ret_t = torch.tensor(ret,                      dtype=torch.float32, device=device)
-        adv_t = (adv_t - adv_t.mean()) / (adv_t.std() + 1e-8)
-        return obs_t, act_t, lp_t, adv_t, ret_t
-
-
-# ──────────────────────────────────────────────
-# Agent PPO v4
+# Agent PPO v4 — Optimized for vectorized training
 # ──────────────────────────────────────────────
 
 class PPOAgent:
     """
-    PPO v4 — unified 28-feature state (see input.md)
+    PPO v4 — vectorized, optimized hyperparams
 
-    State 28 features :
-      + food_delta_x/y : direction continue vers la nourriture
-      + danger_N/E/S/W : danger binaire immédiat (absolu, 4 directions cardinales)
-      + length_norm, urgency : contexte temporel
-
-    Reward potential-based : bonus de proximité nourriture à chaque step
-
-    LR schedule : CosineAnnealingLR (T_max = total_timesteps, eta_min = 1e-5)
-      → Décroissance douce sur toute la durée, jamais à 0
-      → Robuste au fait que chaque épisode peut déclencher une update
-
-    Hyperparamètres :
-      LR         = 3e-4
-      GAMMA      = 0.99
-      GAE_LAMBDA = 0.95
-      CLIP_EPS   = 0.15
-      ENT_COEF   = 0.05
-      VF_COEF    = 0.5
-      MAX_GRAD   = 0.5
-      N_EPOCHS   = 8
-      BATCH_SIZE = 64
-      N_STEPS    = 2048
+    Hyperparamètres optimisés (basé sur SB3 best practices) :
+      LR         = 3e-4        (standard PPO)
+      GAMMA      = 0.99        (long horizon)
+      GAE_LAMBDA = 0.95        (standard)
+      CLIP_EPS   = 0.2         (standard PPO, was 0.15)
+      ENT_COEF   = 0.01        (less exploration, more exploitation)
+      VF_COEF    = 0.5         (standard)
+      MAX_GRAD   = 0.5         (standard)
+      N_EPOCHS   = 10          (more passes, was 8)
+      BATCH_SIZE = 128         (bigger batches, was 64)
+      N_STEPS    = 512         (per env, 512 * 8 = 4096 total)
+      N_ENVS     = 8           (vectorized)
     """
 
     LR         = 3e-4
     GAMMA      = 0.99
     GAE_LAMBDA = 0.95
-    CLIP_EPS   = 0.15
-    ENT_COEF   = 0.05
+    CLIP_EPS   = 0.2
+    ENT_COEF   = 0.01
     VF_COEF    = 0.5
     MAX_GRAD   = 0.5
-    N_EPOCHS   = 8
-    BATCH_SIZE = 64
-    N_STEPS    = 2048
+    N_EPOCHS   = 10
+    BATCH_SIZE = 128
+    N_STEPS    = 512    # per env
+    N_ENVS     = 8
 
     def __init__(self, obs_dim: int = 28, act_dim: int = 4,
                  hidden: int = 256, device: Optional[torch.device] = None,
-                 total_timesteps: int = 3_000_000):
+                 total_timesteps: int = 10_000_000):
 
         self.device = device or torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
@@ -499,37 +573,57 @@ class PPOAgent:
         self.net   = ActorCritic(obs_dim, act_dim, hidden).to(self.device)
         self.optim = optim.Adam(self.net.parameters(), lr=self.LR, eps=1e-5)
 
-        # ── CosineAnnealingLR : descend en cosinus sur tout l'entraînement
-        # T_max = nombre d'updates total estimé (plus conservateur)
-        # eta_min = 1e-5 (jamais à 0, permet de continuer à apprendre)
-        n_updates_total = max(1, total_timesteps // self.N_STEPS) * 3  # x3 : marge pour les updates résiduelles
-        self.scheduler  = optim.lr_scheduler.CosineAnnealingLR(
+        # CosineAnnealingLR over total training
+        steps_per_collect = self.N_STEPS * self.N_ENVS
+        n_updates_total   = max(1, total_timesteps // steps_per_collect)
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
             self.optim,
             T_max   = n_updates_total,
             eta_min = 1e-5,
         )
 
-        self.buffer     = RolloutBuffer()
+        self.buffer     = VecRolloutBuffer(self.N_STEPS, self.N_ENVS, obs_dim)
         self._n_updates = 0
 
     @torch.no_grad()
+    def select_action_batch(self, obs_batch: np.ndarray, deterministic: bool = False):
+        """
+        obs_batch: (n_envs, obs_dim) numpy array
+        Returns: actions (n_envs,), log_probs (n_envs,), values (n_envs,)
+        """
+        obs_t = torch.tensor(obs_batch, dtype=torch.float32, device=self.device)
+        act, lp, val, _ = self.net.get_action(obs_t, deterministic)
+        return act.cpu().numpy(), lp.cpu().numpy(), val.cpu().numpy()
+
+    @torch.no_grad()
     def select_action(self, obs: np.ndarray, deterministic: bool = False):
+        """Single obs for evaluation."""
         obs_t  = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
         act, lp, val, _ = self.net.get_action(obs_t, deterministic)
         return act.item(), lp.item(), val.item()
 
-    def update(self, last_obs: np.ndarray, last_done: bool) -> dict:
-        with torch.no_grad():
-            lt    = torch.tensor(last_obs, dtype=torch.float32, device=self.device).unsqueeze(0)
-            _, lv = self.net(lt)
-            lv_val = lv.item() * (1 - float(last_done))
+    @torch.no_grad()
+    def get_values_batch(self, obs_batch: np.ndarray) -> np.ndarray:
+        """Get value estimates for a batch of observations."""
+        obs_t = torch.tensor(obs_batch, dtype=torch.float32, device=self.device)
+        _, values = self.net(obs_t)
+        return values.cpu().numpy()
 
-        obs_t, act_t, lp_t, adv_t, ret_t = \
-            self.buffer.compute_returns_advantages(lv_val, self.GAMMA, self.GAE_LAMBDA, self.device)
+    def update(self, last_obs: np.ndarray, last_dones: np.ndarray) -> dict:
+        """
+        PPO update with value function clipping.
+        last_obs: (n_envs, obs_dim), last_dones: (n_envs,)
+        """
+        last_values = self.get_values_batch(last_obs) * (1 - last_dones)
 
-        n   = len(self.buffer)
+        obs_t, act_t, old_lp_t, old_val_t, adv_t, ret_t = \
+            self.buffer.compute_returns_advantages(
+                last_values, last_dones, self.GAMMA, self.GAE_LAMBDA, self.device
+            )
+
+        n   = obs_t.shape[0]
         idx = np.arange(n)
-        agg = {"pg": 0.0, "vf": 0.0, "ent": 0.0, "tot": 0.0}
+        agg = {"pg": 0.0, "vf": 0.0, "ent": 0.0, "tot": 0.0, "clip_frac": 0.0}
         cnt = 0
 
         for _ in range(self.N_EPOCHS):
@@ -541,25 +635,39 @@ class PPOAgent:
                 new_lp  = dist.log_prob(act_t[bi])
                 entropy = dist.entropy().mean()
 
-                ratio  = torch.exp(new_lp - lp_t[bi])
-                pg     = torch.max(
-                    -adv_t[bi] * ratio,
-                    -adv_t[bi] * torch.clamp(ratio, 1 - self.CLIP_EPS, 1 + self.CLIP_EPS)
-                ).mean()
-                vf     = nn.functional.mse_loss(values, ret_t[bi])
-                loss   = pg + self.VF_COEF * vf - self.ENT_COEF * entropy
+                # Policy loss (clipped)
+                ratio    = torch.exp(new_lp - old_lp_t[bi])
+                pg_loss1 = -adv_t[bi] * ratio
+                pg_loss2 = -adv_t[bi] * torch.clamp(ratio, 1 - self.CLIP_EPS, 1 + self.CLIP_EPS)
+                pg_loss  = torch.max(pg_loss1, pg_loss2).mean()
+
+                # Value loss (clipped — SB3 style)
+                values_clipped = old_val_t[bi] + torch.clamp(
+                    values - old_val_t[bi], -self.CLIP_EPS, self.CLIP_EPS
+                )
+                vf_loss1 = (values - ret_t[bi]) ** 2
+                vf_loss2 = (values_clipped - ret_t[bi]) ** 2
+                vf_loss  = 0.5 * torch.max(vf_loss1, vf_loss2).mean()
+
+                loss = pg_loss + self.VF_COEF * vf_loss - self.ENT_COEF * entropy
 
                 self.optim.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.net.parameters(), self.MAX_GRAD)
                 self.optim.step()
 
-                agg["pg"] += pg.item(); agg["vf"] += vf.item()
-                agg["ent"] += entropy.item(); agg["tot"] += loss.item()
+                # Tracking
+                with torch.no_grad():
+                    clip_frac = ((ratio - 1.0).abs() > self.CLIP_EPS).float().mean().item()
+                agg["pg"]  += pg_loss.item()
+                agg["vf"]  += vf_loss.item()
+                agg["ent"] += entropy.item()
+                agg["tot"] += loss.item()
+                agg["clip_frac"] += clip_frac
                 cnt += 1
 
         self.scheduler.step()
-        self.buffer.clear()
+        self.buffer.reset()
         self._n_updates += 1
         cnt = max(cnt, 1)
 
@@ -568,6 +676,7 @@ class PPOAgent:
             "loss_policy" : agg["pg"]  / cnt,
             "loss_value"  : agg["vf"]  / cnt,
             "entropy"     : agg["ent"] / cnt,
+            "clip_frac"   : agg["clip_frac"] / cnt,
             "n_updates"   : self._n_updates,
             "lr"          : self.scheduler.get_last_lr()[0],
         }
