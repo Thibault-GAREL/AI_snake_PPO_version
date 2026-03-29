@@ -11,7 +11,7 @@
 ![Contributions](https://img.shields.io/badge/contributions-welcome-orange.svg)
 
 <p align="center">
-  <img src="img/SnakePPO-Score17.gif" alt="Snake AI playing with PPO" width="400">
+  <img src="img/SnakePPO-Score17.gif" alt="Snake AI playing with PPO (v5: mean 38.67, max 64)" width="400">
 </p>
 
 ## 📖 Project Description
@@ -44,8 +44,8 @@ This project is part of a series of **4 Snake AI implementations** using differe
 | **Memory / Buffer** | Population (100 genomes) | Experience Replay (100 000) | Rollout buffer (2 048 steps) | Supervised buffer (300 000) |
 | **Batch** | — (full population eval.) | 128 | 64 | Full dataset per round |
 | **Training time** | ~15 h | ~30–60 min (GPU) | ~3 h (GPU) | ~12 min (GPU) |
-| **Max score** | > 20 | 13 | **61** | **43** |
-| **Mean score** | 10 | 8.55 | **~33** | **22.77** |
+| **Max score** | > 20 | 13 | **64** | **43** |
+| **Mean score** | 10 | 8.55 | **38.67** | **22.77** |
 | **Reward signal** | ❌ (fitness only) | ✅ | ✅ | ❌ (oracle labels) |
 | **GPU support** | ❌ | ✅ | ✅ | ✅ |
 | **Sample efficiency** | 🔴 Low | 🟡 Medium | 🔴 Low | 🟢 High |
