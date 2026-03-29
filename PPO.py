@@ -185,7 +185,7 @@ class SnakeEnv:
     COLS      = WIDTH  // CELL   # 16
     ROWS      = HEIGHT // CELL   # 8
     MAX_CELLS = COLS * ROWS      # 128 (longueur maximale théorique)
-    MAX_STEPS = 500
+    MAX_STEPS = 1000
     OBS_DIM   = 28               # unified 28-feature state
     ACT_DIM   = 4
 
@@ -317,7 +317,8 @@ class SnakeEnv:
         reward  = 0.02 + shaping
 
         # Pénalité si le serpent tourne en rond trop longtemps sans manger
-        max_allowed = self.MAX_STEPS - self._snake.lenght * 2
+        # Pression croissante avec la longueur : plus le serpent est long, moins il a de pas avant malus
+        max_allowed = max(100, 300 - self._snake.lenght * 5)
         if self._steps_since_food > max_allowed:
             reward -= 0.5
 
@@ -533,32 +534,32 @@ class ActorCritic(nn.Module):
 
 class PPOAgent:
     """
-    PPO v4 — vectorized, optimized hyperparams
+    PPO v5 — vectorized, optimized for high score (target: mean ~23)
 
-    Hyperparamètres optimisés (basé sur SB3 best practices) :
+    Hyperparamètres (basé sur SB3 best practices + expériences v3/v4) :
       LR         = 3e-4        (standard PPO)
       GAMMA      = 0.99        (long horizon)
       GAE_LAMBDA = 0.95        (standard)
-      CLIP_EPS   = 0.2         (standard PPO, was 0.15)
-      ENT_COEF   = 0.01        (less exploration, more exploitation)
+      CLIP_EPS   = 0.15        (plus conservateur → mises à jour plus stables)
+      ENT_COEF   = 0.05        (exploration accrue → critique pour serpent long)
       VF_COEF    = 0.5         (standard)
       MAX_GRAD   = 0.5         (standard)
-      N_EPOCHS   = 10          (more passes, was 8)
-      BATCH_SIZE = 128         (bigger batches, was 64)
-      N_STEPS    = 512         (per env, 512 * 8 = 4096 total)
+      N_EPOCHS   = 10          (passes par mise à jour)
+      BATCH_SIZE = 256         (grands mini-batches → gradients plus stables)
+      N_STEPS    = 1024        (per env, 1024 * 8 = 8192 total → meilleure estimation GAE)
       N_ENVS     = 8           (vectorized)
     """
 
     LR         = 3e-4
     GAMMA      = 0.99
     GAE_LAMBDA = 0.95
-    CLIP_EPS   = 0.2
-    ENT_COEF   = 0.01
+    CLIP_EPS   = 0.15
+    ENT_COEF   = 0.05
     VF_COEF    = 0.5
     MAX_GRAD   = 0.5
     N_EPOCHS   = 10
-    BATCH_SIZE = 128
-    N_STEPS    = 512    # per env
+    BATCH_SIZE = 256
+    N_STEPS    = 1024   # per env
     N_ENVS     = 8
 
     def __init__(self, obs_dim: int = 28, act_dim: int = 4,

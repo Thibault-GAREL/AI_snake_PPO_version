@@ -43,9 +43,9 @@ This project is part of a series of **4 Snake AI implementations** using differe
 | **Exploration** | Genetic mutations + speciation | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) | DAgger oracle (β : 0.8 → 0.05) |
 | **Memory / Buffer** | Population (100 genomes) | Experience Replay (100 000) | Rollout buffer (2 048 steps) | Supervised buffer (300 000) |
 | **Batch** | — (full population eval.) | 128 | 64 | Full dataset per round |
-| **Training time** | ~15 h | ~30–60 min (GPU) | ~6.2 h | ~12 min (GPU) |
-| **Max score** | > 20 | 13 | 21 *(v3)* | **43** |
-| **Mean score** | 10 | 8.55 | 10.18 *(v3)* | **22.77** |
+| **Training time** | ~15 h | ~30–60 min (GPU) | ~8 h *(v5)* | ~12 min (GPU) |
+| **Max score** | > 20 | 13 | *(v5 in training)* | **43** |
+| **Mean score** | 10 | 8.55 | *(v5 in training)* | **22.77** |
 | **Reward signal** | ❌ (fitness only) | ✅ | ✅ | ❌ (oracle labels) |
 | **GPU support** | ❌ | ✅ | ✅ | ✅ |
 | **Sample efficiency** | 🔴 Low | 🟡 Medium | 🔴 Low | 🟢 High |
@@ -64,7 +64,7 @@ This project is part of a series of **4 Snake AI implementations** using differe
 
 📐 **Generalized Advantage Estimation (GAE)** — λ=0.95 for stable advantage computation
 
-✂️ **PPO Clipping** — ε=0.15 prevents destructive policy updates
+✂️ **PPO Clipping** — ε=0.15 for conservative policy updates
 
 🔄 **CosineAnnealing LR** — smooth decay from 3e-4 to 1e-5 over full training
 
@@ -397,21 +397,23 @@ python xai_shap_ppo.py                                           # all plots
 
 ## ⚙️ Key Hyperparameters
 
-| Parameter         | Value           | Description                           |
-| ----------------- | --------------- | ------------------------------------- |
-| `LR`              | 3e-4            | Adam optimizer initial learning rate  |
-| `LR schedule`     | CosineAnnealing | Decay from 3e-4 to 1e-5 over training |
-| `GAMMA`           | 0.99            | Discount factor                       |
-| `GAE_LAMBDA`      | 0.95            | GAE smoothing parameter               |
-| `CLIP_EPS`        | 0.15            | PPO surrogate clipping range          |
-| `ENT_COEF`        | 0.05            | Entropy bonus coefficient             |
-| `VF_COEF`         | 0.5             | Value function loss coefficient       |
-| `MAX_GRAD`        | 0.5             | Gradient clipping norm                |
-| `N_EPOCHS`        | 8               | PPO epochs per update                 |
-| `BATCH_SIZE`      | 64              | Mini-batch size per gradient step     |
-| `N_STEPS`         | 2048            | Rollout length before each update     |
-| `total_timesteps` | 8 000 000       | Training budget                       |
-| `hidden_size`     | 256             | Neurons in shared trunk layers        |
+| Parameter         | Value           | Description                                              |
+| ----------------- | --------------- | -------------------------------------------------------- |
+| `LR`              | 3e-4            | Adam optimizer initial learning rate                     |
+| `LR schedule`     | CosineAnnealing | Decay from 3e-4 to 1e-5 over full training               |
+| `GAMMA`           | 0.99            | Discount factor (long horizon)                           |
+| `GAE_LAMBDA`      | 0.95            | GAE smoothing parameter                                  |
+| `CLIP_EPS`        | 0.15            | PPO surrogate clipping range (conservative updates)      |
+| `ENT_COEF`        | 0.05            | Entropy bonus — crucial for long-snake exploration       |
+| `VF_COEF`         | 0.5             | Value function loss coefficient                          |
+| `MAX_GRAD`        | 0.5             | Gradient clipping norm                                   |
+| `N_EPOCHS`        | 10              | PPO epochs per update                                    |
+| `BATCH_SIZE`      | 256             | Mini-batch size per gradient step (stable gradients)     |
+| `N_STEPS`         | 1024            | Rollout steps per env before update (better GAE)         |
+| `N_ENVS`          | 8               | Parallel environments (8192 steps/collect total)         |
+| `MAX_STEPS`       | 1000            | Max episode length (allows eating 23+ foods)             |
+| `total_timesteps` | 15 000 000      | Training budget                                          |
+| `hidden_size`     | 256             | Neurons in shared trunk layers                           |
 
 ---
 
@@ -424,7 +426,7 @@ python xai_shap_ppo.py                                           # all plots
 | Food eaten           | +10.0                                                               |
 | Win (grid full)      | +20.0                                                               |
 | Death (wall or body) | −10.0 − length × 0.5                                               |
-| Stagnation penalty   | −0.5 if `steps_since_food > MAX_STEPS − length×2`                  |
+| Stagnation penalty   | −0.5 if `steps_since_food > max(100, 300 − length×5)` *(adaptive)* |
 
 The death penalty scales with snake length : losing a long snake is penalized more than losing a short one. The potential-based proximity reward provides dense feedback at every step — it cannot distort the optimal policy since it is grounded in a potential function (Manhattan distance to food).
 

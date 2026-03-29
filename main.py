@@ -25,7 +25,7 @@ from PPO import PPOAgent, SnakeEnv, VecSnakeEnv
 # ──────────────────────────────────────────────
 
 CFG = {
-    "total_timesteps" : 10_000_000,
+    "total_timesteps" : 15_000_000,
     "hidden_size"     : 256,
     "seed"            : 42,
     "path_best"       : "model_best.pth",
