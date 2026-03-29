@@ -244,7 +244,7 @@ _Score drop when each of the 22 features is randomized. Features with longer bar
 
 ![xai_variance](xai_features_ppo/xai_variance.png)
 
-_L2 norm and std of each input column in shared[0] Linear(22→256). Features with high L2 norm are structurally important. Heatmap shows the full weight matrix W₁ [22×64 neurons]. Scatter plot reveals the importance quadrant._
+_L2 norm and std of each input column in shared[0] Linear(28→256). Features with high L2 norm are structurally important. Heatmap shows the full weight matrix W₁ [28×64 neurons]. Scatter plot reveals the importance quadrant._
 
 #### Feature-action correlation
 
@@ -256,7 +256,7 @@ _Pearson correlation between each feature and each chosen action. Clean patterns
 
 ![xai_mean_per_action](xai_features_ppo/xai_mean_per_action.png)
 
-_Mean value of all 22 features when the agent chooses each action. Color-coded by category : 🔵 danger, 🟠 food, 🟢 direction, 🩷 context._
+_Mean value of all 28 features when the agent chooses each action. Color-coded by category : 🔵 danger, 🟠 food, 🟡 food delta, 🔴 danger binary, 🟢 direction, 🩷 context._
 
 ---
 
@@ -377,7 +377,7 @@ python xai_qvalues_ppo.py                         # all plots
 python xai_qvalues_ppo.py --heatmap               # policy + value heatmaps only
 python xai_qvalues_ppo.py --temporal --episodes 3 # temporal evolution
 
-# Feature importance (22 features)
+# Feature importance (28 features)
 python xai_features_ppo.py --variance             # fast, no episodes needed
 python xai_features_ppo.py --correlation --episodes 20
 python xai_features_ppo.py --permutation --episodes 30
