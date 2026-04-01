@@ -11,7 +11,7 @@
 ![Contributions](https://img.shields.io/badge/contributions-welcome-orange.svg)
 
 <p align="center">
-  <img src="img/SnakePPO-Score54.gif" alt="Snake AI playing with PPO (v5: mean 38.67, max 64)" width="400">
+  <img src="img/SnakePPO-Score54.gif" alt="Snake AI playing with PPO (v5: mean 38.67, max 64)">
 </p>
 
 ## 📖 Project Description
