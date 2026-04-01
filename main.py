@@ -10,6 +10,7 @@ main.py v4 — Vectorized PPO Training
 import argparse
 import os
 import csv
+import json
 import time
 from collections import deque
 
@@ -36,6 +37,75 @@ CFG = {
     "window_size"     : 100,    # rolling window for score tracking
     "save_interval"   : 20,     # save checkpoint every N updates
 }
+
+
+# ═══════════════════════════════════════════════
+#  Sélection automatique du meilleur modèle
+# ═══════════════════════════════════════════════
+def find_best_model(base_dir: str = ".") -> str | None:
+    """
+    Cherche le meilleur model_best.pth en comparant les summary.json.
+
+    Priorité :
+      1. final_best_score le plus élevé
+      2. final_mean_100 le plus élevé (tie-breaker)
+      3. Date de modification du fichier .pth (fallback si pas de summary.json)
+
+    Cherche dans :
+      - models/<run>/model_best.pth  +  results/<run>/summary.json  (multi-runs)
+      - ./model_best.pth             +  ./summary.json              (flat, courant)
+    """
+    models_root  = os.path.join(base_dir, "models")
+    results_root = os.path.join(base_dir, "results")
+
+    candidates = []  # (final_best_score, final_mean_100, mtime, path)
+
+    # ── Runs organisés models/<run>/ ─────────────
+    if os.path.isdir(models_root):
+        for run_name in os.listdir(models_root):
+            model_path   = os.path.join(models_root,  run_name, "model_best.pth")
+            summary_path = os.path.join(results_root, run_name, "summary.json")
+            if not os.path.isfile(model_path):
+                continue
+            if os.path.isfile(summary_path):
+                try:
+                    with open(summary_path, encoding="utf-8") as f:
+                        s = json.load(f)
+                    best_score = s.get("final_best_score", -1)
+                    mean_100   = s.get("final_mean_100",   -1.0)
+                    mtime      = os.path.getmtime(model_path)
+                    candidates.append((best_score, mean_100, mtime, model_path))
+                except (json.JSONDecodeError, OSError):
+                    pass
+            else:
+                mtime = os.path.getmtime(model_path)
+                candidates.append((-1, -1.0, mtime, model_path))
+
+    # ── Flat : model_best.pth à la racine ────────
+    flat_model   = os.path.join(base_dir, "model_best.pth")
+    flat_summary = os.path.join(base_dir, "summary.json")
+    if os.path.isfile(flat_model):
+        best_score, mean_100 = -1, -1.0
+        if os.path.isfile(flat_summary):
+            try:
+                with open(flat_summary, encoding="utf-8") as f:
+                    s = json.load(f)
+                best_score = s.get("final_best_score", -1)
+                mean_100   = s.get("final_mean_100",   -1.0)
+            except (json.JSONDecodeError, OSError):
+                pass
+        mtime = os.path.getmtime(flat_model)
+        candidates.append((best_score, mean_100, mtime, flat_model))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+    chosen = candidates[0]
+    print(f"[AUTO] Meilleur modèle sélectionné : {chosen[3]}")
+    if chosen[0] >= 0:
+        print(f"       best_score={chosen[0]}  mean_100={chosen[1]:.2f}")
+    return chosen[3]
 
 
 def set_seed(seed: int):
@@ -81,8 +151,12 @@ def train(args):
         total_timesteps = args.timesteps,
     )
 
-    if args.load and os.path.exists(CFG["path_best"]):
-        agent.load(CFG["path_best"])
+    if args.load:
+        model_path = find_best_model()
+        if model_path:
+            agent.load(model_path)
+        else:
+            print("[!] Aucun modèle trouvé — entraînement from scratch.")
 
     vec_env = VecSnakeEnv(n_envs=agent.N_ENVS)
 
@@ -199,6 +273,17 @@ def train(args):
     log_f.close()
     vec_env.close()
 
+    # Résumé JSON pour la sélection automatique
+    summary = {
+        "final_best_score" : int(max(score_window)) if score_window else 0,
+        "final_mean_100"   : round(float(best_mean), 4),
+        "episodes"         : episodes_done,
+        "timesteps"        : global_step,
+    }
+    with open("summary.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+    print(f"[PPO v4] summary.json sauvegardé (best_score={summary['final_best_score']}, mean_100={summary['final_mean_100']})")
+
     elapsed = time.time() - t_start
     print("\n" + "=" * 70)
     print(f"  Entraînement terminé !")
@@ -219,20 +304,21 @@ def evaluate(args):
     device = torch.device(args.device) if args.device else \
              torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    model_path = find_best_model()
+    if model_path is None:
+        print("[!] Aucun modèle trouvé. Lance d'abord : python main.py")
+        return
+
     print("=" * 70)
     print(f"  Snake PPO v4 — Évaluation")
-    print(f"  Modèle : {CFG['path_best']}  |  Épisodes : {args.eval_episodes}")
+    print(f"  Modèle : {model_path}  |  Épisodes : {args.eval_episodes}")
     print("=" * 70)
-
-    if not os.path.exists(CFG["path_best"]):
-        print(f"[!] Modèle introuvable. Lance d'abord : python main.py")
-        return
 
     agent = PPOAgent(
         obs_dim = SnakeEnv.OBS_DIM, act_dim = SnakeEnv.ACT_DIM,
         hidden  = CFG["hidden_size"], device = device,
     )
-    agent.load(CFG["path_best"])
+    agent.load(model_path)
     agent.net.eval()
 
     env    = SnakeEnv(render=True)

@@ -73,8 +73,88 @@ class Manager_snake:
         return True
 
     def draw_snake(self, display, cell, GREEN=(0, 255, 0), BLACK=(40, 40, 60)):
-        for s in self.list_snake:
+        # Dans le PPO, la croissance est ajoutée APRÈS move() : les deux derniers
+        # segments peuvent avoir la même position (frame juste après avoir mangé).
+        # On détecte ce doublon et on traite l'avant-dernier comme queue visuelle.
+        eff_tail = self.lenght - 1
+        if self.lenght >= 2:
+            t = self.list_snake[self.lenght - 1]
+            p = self.list_snake[self.lenght - 2]
+            if t.x == p.x and t.y == p.y:
+                eff_tail = self.lenght - 2
+
+        for index, s in enumerate(self.list_snake):
+            # Le segment fantôme (doublon) est invisible — on ne le dessine pas
+            if index > eff_tail:
+                continue
+
             pygame.draw.rect(display, GREEN, (s.x, s.y, cell, cell))
+
+            # ── Tête : yeux + bordures latérales ──
+            if index == 0:
+                if self.direction == "UP":
+                    pygame.draw.rect(display, BLACK, (s.x + 10, s.y + 5, 5, 5))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 15, s.y + 5, 5, 5))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, 5, cell))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 5, s.y, 5, cell))
+                elif self.direction == "DOWN":
+                    pygame.draw.rect(display, BLACK, (s.x + 10, s.y + cell - 10, 5, 5))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 15, s.y + cell - 10, 5, 5))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, 5, cell))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 5, s.y, 5, cell))
+                elif self.direction == "RIGHT":
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 10, s.y + 10, 5, 5))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 10, s.y + cell - 15, 5, 5))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, cell, 5))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y + cell - 5, cell, 5))
+                elif self.direction == "LEFT":
+                    pygame.draw.rect(display, BLACK, (s.x + 5, s.y + 10, 5, 5))
+                    pygame.draw.rect(display, BLACK, (s.x + 5, s.y + cell - 15, 5, 5))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, cell, 5))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y + cell - 5, cell, 5))
+
+            # ── Queue visuelle : bordures côtés libres ──
+            if index == eff_tail and index > 0:
+                prev = self.list_snake[index - 1]
+                if s.y != prev.y:
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, 5, cell))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 5, s.y, 5, cell))
+                if s.x != prev.x:
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, cell, 5))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y + cell - 5, cell, 5))
+
+            # ── Corps (segments intermédiaires) : droits + virages ──
+            if 0 < index < eff_tail:
+                p = self.list_snake[index - 1]
+                n = self.list_snake[index + 1]
+                # Segment horizontal
+                if (p.x < s.x < n.x) or (n.x < s.x < p.x):
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, cell, 5))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y + cell - 5, cell, 5))
+                # Segment vertical
+                if (p.y < s.y < n.y) or (n.y < s.y < p.y):
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, 5, cell))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 5, s.y, 5, cell))
+                # Virage ↓→  ou  →↓
+                if (s.y < n.y and s.x < p.x) or (s.y < p.y and s.x < n.x):
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, 5, cell))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, cell, 5))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 5, s.y + cell - 5, 5, 5))
+                # Virage ↑→  ou  →↑
+                if (s.y > n.y and s.x < p.x) or (s.y > p.y and s.x < n.x):
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, 5, cell))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y + cell - 5, cell, 5))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 5, s.y, 5, 5))
+                # Virage ↑←  ou  ←↑
+                if (s.y > n.y and s.x > p.x) or (s.y > p.y and s.x > n.x):
+                    pygame.draw.rect(display, BLACK, (s.x, s.y + cell - 5, cell, 5))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 5, s.y, 5, cell))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, 5, 5))
+                # Virage ↓←  ou  ←↓
+                if (s.y < n.y and s.x > p.x) or (s.y < p.y and s.x > n.x):
+                    pygame.draw.rect(display, BLACK, (s.x, s.y, cell, 5))
+                    pygame.draw.rect(display, BLACK, (s.x + cell - 5, s.y, 5, cell))
+                    pygame.draw.rect(display, BLACK, (s.x, s.y + cell - 5, 5, 5))
 
 
 # ──────────────────────────────────────────────
