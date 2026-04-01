@@ -37,15 +37,15 @@ This project is part of a series of **4 Snake AI implementations** using differe
 | **Paradigm** | Evolutionary | Reinforcement Learning | Reinforcement Learning | Imitation Learning |
 | **Algorithm type** | Neuroevolution | Off-policy (Q-learning) | On-policy (Actor-Critic) | Supervised (XGBoost + DAgger) |
 | **Output** | Actions [4] | Q-values [4] | Policy logits [4] + V(s) [1] | Class probabilities [4] |
-| **Input features** | 16 | 16 | 28 | 26 |
-| **Architecture** | Evolving MLP (topology changes) | MLP 16→256→128→64→4 | Actor-Critic shared trunk 28→256→256 | 1 600 boosted trees (400 × 4 classes) |
-| **Hidden neurons / nodes** | ~28 nodes (evolves) | 448 hidden neurons | 896 hidden neurons | ~80k–200k decision nodes |
+| **Input features** | 16 | 28 | 28 | 26 |
+| **Architecture** | Evolving MLP (topology changes) | MLP 28→256→256→128→4 | Actor-Critic shared trunk 28→256→256 | 1 600 boosted trees (400 × 4 classes) |
+| **Hidden neurons / nodes** | ~28 nodes (evolves) | 640 hidden neurons | 896 hidden neurons | ~80k–200k decision nodes |
 | **Exploration** | Genetic mutations + speciation | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) | DAgger oracle (β : 0.8 → 0.05) |
 | **Memory / Buffer** | Population (100 genomes) | Experience Replay (100 000) | Rollout buffer (2 048 steps) | Supervised buffer (300 000) |
 | **Batch** | — (full population eval.) | 128 | 64 | Full dataset per round |
-| **Training time** | ~15 h | ~30–60 min (GPU) | ~3 h (GPU) | ~12 min (GPU) |
-| **Max score** | > 20 | 13 | **64** | **43** |
-| **Mean score** | 10 | 8.55 | **38.67** | **22.77** |
+| **Training time** | ~15 h | ~2.5 h (GPU) | ~3 h (GPU) | ~12 min (GPU) |
+| **Max score** | > 20 | **45** | **64** | **43** |
+| **Mean score** | 10 | **22.60** | **38.67** | **22.77** |
 | **Reward signal** | ❌ (fitness only) | ✅ | ✅ | ❌ (oracle labels) |
 | **GPU support** | ❌ | ✅ | ✅ | ✅ |
 | **Sample efficiency** | 🔴 Low | 🟡 Medium | 🔴 Low | 🟢 High |
