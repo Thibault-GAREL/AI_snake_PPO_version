@@ -36,23 +36,24 @@ This project is part of a series of **4 Snake AI implementations** using differe
 | --- | --- | --- | --- | --- |
 | **Paradigm** | Evolutionary | Imitation Learning | Reinforcement Learning | Reinforcement Learning |
 | **Algorithm type** | Neuroevolution | Supervised (XGBoost + DAgger) | Off-policy (Q-learning) | On-policy (Actor-Critic) |
-| **Output** | Actions [4] | Class probabilities [4] | Q-values [4] | Policy logits [4] + V(s) [1] |
+| **Reward signal** | ❌ (fitness only) | ❌ (oracle labels) | ✅ | ✅ |
 | **Input features** | 16 | 26 | 28 | 28 |
+| **Output** | Actions [4] | Class probabilities [4] | Q-values [4] | Policy logits [4] + V(s) [1] |
 | **Architecture** | Evolving MLP (topology changes) | 1 600 boosted trees (400 × 4 classes) | MLP 28→256→256→128→4 | Actor-Critic shared trunk 28→256→256 |
+| **Parameters** | ~200–500 (evolves) | N/A (boosted trees) | ~140k | ~145k |
 | **Hidden neurons / nodes** | ~28 nodes (evolves) | ~80k–200k decision nodes | 640 hidden neurons | 896 hidden neurons |
 | **Exploration** | Genetic mutations + speciation | DAgger oracle (β : 0.8 → 0.05) | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) |
 | **Memory / Buffer** | Population (100 genomes) | Supervised buffer (300 000) | Experience Replay (100 000) | Rollout buffer (2 048 steps) |
 | **Batch** | — (full population eval.) | Full dataset per round | 128 | 64 |
-| **Training time** | ~15 h | ~12 min (GPU) | ~2.5 h (GPU) | ~3 h (GPU) |
-| **Max score** | > 20 | **43** | **45** | **64** |
-| **Mean score** | 10 | **22.77** | **22.60** | **38.67** |
-| **Reward signal** | ❌ (fitness only) | ❌ (oracle labels) | ✅ | ✅ |
 | **GPU support** | ❌ | ✅ | ✅ | ✅ |
 | **Sample efficiency** | 🔴 Low | 🟢 High | 🟡 Medium | 🔴 Low |
+| **Training time** | **~15 h** | **~12 min (GPU)** | **~2.5 h (GPU)** | **~3 h (GPU)** |
+| **Max score** | **> 20** | **43** | **45** | **64** |
+| **Mean score** | **10** | **22.77** | **22.60** | **38.67** |
 | **Intrinsic interpretability** | 🟡 Low | 🟢 High (tree paths) | 🔴 Black box | 🔴 Black box |
-| **XAI suite** | ✅ 4 scripts | ✅ 4 scripts | ✅ 4 scripts | ✅ 4 scripts |
 
 > ★ = current repository
+> Each project includes an XAI suite of 4 analysis scripts.
 
 ---
 
