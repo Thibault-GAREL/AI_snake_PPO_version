@@ -14,7 +14,7 @@
   <img src="img/SnakePPO-Score54.gif" alt="Snake AI playing with PPO (v5: mean 38.67, max 64)">
 </p>
 
-## 📖 Project Description
+## 📝 Project Description
 
 This project is the **third installment** of my Snake AI series :
 
@@ -28,33 +28,7 @@ The project also includes a full **Explainable AI (XAI)** suite adapted for the 
 
 ---
 
-## 🆚 Comparison — 4 Snake AI approaches
-
-This project is part of a series of **4 Snake AI implementations** using different AI paradigms on the same game :
-
-| Aspect | 🧬 [NEAT](https://github.com/Thibault-GAREL/AI_snake_genetic_version) | 🌳 [Decision Tree](https://github.com/Thibault-GAREL/AI_snake_decision_tree_version) | 🤖 [DQL (DQN)](https://github.com/Thibault-GAREL/AI_snake_DQN_version) | 🎯 [PPO](https://github.com/Thibault-GAREL/AI_snake_PPO_version) ★ |
-| --- | --- | --- | --- | --- |
-| **Paradigm** | Evolutionary | Imitation Learning | Reinforcement Learning | Reinforcement Learning |
-| **Algorithm type** | Neuroevolution | Supervised (XGBoost + DAgger) | Off-policy (Q-learning) | On-policy (Actor-Critic) |
-| **Architecture** | 16 → ~28 hidden (final, evolved) → 4 | 26 → 1 600 trees (400×4) → 4 | 28 → 256 → 256 → 128 → 4 | 28 → 256 → 256 → {128→4 (π), 128→1 (V)} |
-| **Model complexity** | ~200–500 params (evolves) | ~80k–200k decision nodes | ~140k params | ~145k params |
-| **Exploration** | Genetic mutations + speciation | DAgger oracle (β : 0.8 → 0.05) | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) |
-| **Memory / Buffer** | Population (100 genomes) | Supervised buffer (300 000) | Experience Replay (100 000) | Rollout buffer (2 048 steps) |
-| **Batch** | — (full population eval.) | Full dataset per round | 128 | 64 |
-| **Training time** | **~15 h** | **~12 min (GPU)** | **~2.5 h (GPU)** | **~3 h (GPU)** |
-| **Max score** | **> 20** | **43** | **45** | **64** |
-| **Mean score** | **10** | **22.77** | **22.60** | **38.67** |
-| **GPU support** | ❌ | ✅ | ✅ | ✅ |
-| **Sample efficiency** | 🔴 Low | 🟢 High | 🟡 Medium | 🔴 Low |
-| **Generalization** | 🟡 Medium | 🔴 Low | 🟡 Medium | 🟢 High |
-| **Intrinsic interpretability** | 🟡 Low | 🟡 Medium (ensemble = grey box) | 🔴 Black box | 🔴 Black box |
-
-> ★ = current repository
-> Each project includes an XAI suite of 4 analysis scripts.
-
----
-
-## ✨ Features
+## 🚀 Features
 
 🧠 **Actor-Critic architecture** — shared trunk with separate policy and value heads
 
@@ -185,6 +159,69 @@ Distance to food in 8 directions. **Sparse** : non-zero only when food is exactl
 
 ---
 
+## ⚙️ Key Hyperparameters
+
+| Parameter         | Value           | Description                                              |
+| ----------------- | --------------- | -------------------------------------------------------- |
+| `LR`              | 3e-4            | Adam optimizer initial learning rate                     |
+| `LR schedule`     | CosineAnnealing | Decay from 3e-4 to 1e-5 over full training               |
+| `GAMMA`           | 0.99            | Discount factor (long horizon)                           |
+| `GAE_LAMBDA`      | 0.95            | GAE smoothing parameter                                  |
+| `CLIP_EPS`        | 0.15            | PPO surrogate clipping range (conservative updates)      |
+| `ENT_COEF`        | 0.05            | Entropy bonus — crucial for long-snake exploration       |
+| `VF_COEF`         | 0.5             | Value function loss coefficient                          |
+| `MAX_GRAD`        | 0.5             | Gradient clipping norm                                   |
+| `N_EPOCHS`        | 10              | PPO epochs per update                                    |
+| `BATCH_SIZE`      | 256             | Mini-batch size per gradient step (stable gradients)     |
+| `N_STEPS`         | 1024            | Rollout steps per env before update (better GAE)         |
+| `N_ENVS`          | 8               | Parallel environments (8192 steps/collect total)         |
+| `MAX_STEPS`       | 1000            | Max episode length (allows eating 23+ foods)             |
+| `total_timesteps` | 15 000 000      | Training budget                                          |
+| `hidden_size`     | 256             | Neurons in shared trunk layers                           |
+
+---
+
+## 📈 Reward Shaping
+
+| Event                | Reward                                                              |
+| -------------------- | ------------------------------------------------------------------- |
+| Survival (each step) | +0.02                                                               |
+| Food proximity       | +0.1 × (prev_manhattan − new_manhattan) / CELL *(potential-based)* |
+| Food eaten           | +10.0                                                               |
+| Win (grid full)      | +20.0                                                               |
+| Death (wall or body) | −10.0 − length × 0.5                                               |
+| Stagnation penalty   | −0.5 if `steps_since_food > max(100, 300 − length×5)` *(adaptive)* |
+
+The death penalty scales with snake length : losing a long snake is penalized more than losing a short one. The potential-based proximity reward provides dense feedback at every step — it cannot distort the optimal policy since it is grounded in a potential function (Manhattan distance to food).
+
+---
+
+## 🆚 Comparison — 4 Snake AI approaches
+
+This project is part of a series of **4 Snake AI implementations** using different AI paradigms on the same game :
+
+| Aspect | 🧬 [NEAT](https://github.com/Thibault-GAREL/AI_snake_genetic_version) | 🌳 [Decision Tree](https://github.com/Thibault-GAREL/AI_snake_decision_tree_version) | 🤖 [DQL (DQN)](https://github.com/Thibault-GAREL/AI_snake_DQN_version) | 🎯 [PPO](https://github.com/Thibault-GAREL/AI_snake_PPO_version) ★ |
+| --- | --- | --- | --- | --- |
+| **Paradigm** | Evolutionary | Imitation Learning | Reinforcement Learning | Reinforcement Learning |
+| **Algorithm type** | Neuroevolution | Supervised (XGBoost + DAgger) | Off-policy (Q-learning) | On-policy (Actor-Critic) |
+| **Architecture** | 16 → ~28 hidden (final, evolved) → 4 | 26 → 1 600 trees (400×4) → 4 | 28 → 256 → 256 → 128 → 4 | 28 → 256 → 256 → {128→4 (π), 128→1 (V)} |
+| **Model complexity** | ~200–500 params (evolves) | ~80k–200k decision nodes | ~140k params | ~145k params |
+| **Exploration** | Genetic mutations + speciation | DAgger oracle (β : 0.8 → 0.05) | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) |
+| **Memory / Buffer** | Population (100 genomes) | Supervised buffer (300 000) | Experience Replay (100 000) | Rollout buffer (2 048 steps) |
+| **Batch** | — (full population eval.) | Full dataset per round | 128 | 64 |
+| **Training time** | **~15 h** | **~12 min (GPU)** | **~2.5 h (GPU)** | **~3 h (GPU)** |
+| **Max score** | **> 20** | **43** | **45** | **64** |
+| **Mean score** | **10** | **22.77** | **22.60** | **38.67** |
+| **GPU support** | ❌ | ✅ | ✅ | ✅ |
+| **Sample efficiency** | 🔴 Low | 🟢 High | 🟡 Medium | 🔴 Low |
+| **Generalization** | 🟡 Medium | 🔴 Low | 🟡 Medium | 🟢 High |
+| **Intrinsic interpretability** | 🟡 Low | 🟡 Medium (ensemble = grey box) | 🔴 Black box | 🔴 Black box |
+
+> ★ = current repository
+> Each project includes an XAI suite of 4 analysis scripts.
+
+---
+
 ## 🔬 Explainable AI (XAI) Suite
 
 Four dedicated scripts analyze the PPO actor-critic model from different angles, adapted from the DQN XAI suite to handle the new architecture (Tanh activations, 28 features, policy probabilities instead of Q-values) :
@@ -304,7 +341,7 @@ _4 views : |SHAP|×action (absolute importance), signed SHAP×action (direction 
 
 ---
 
-## 📁 Repository structure
+## 📂 Repository structure
 
 ```bash
 ├── snake.py                    # Snake game engine (from snake_game repo)
@@ -393,44 +430,7 @@ python xai_shap_ppo.py                                           # all plots
 
 ---
 
-## ⚙️ Key Hyperparameters
-
-| Parameter         | Value           | Description                                              |
-| ----------------- | --------------- | -------------------------------------------------------- |
-| `LR`              | 3e-4            | Adam optimizer initial learning rate                     |
-| `LR schedule`     | CosineAnnealing | Decay from 3e-4 to 1e-5 over full training               |
-| `GAMMA`           | 0.99            | Discount factor (long horizon)                           |
-| `GAE_LAMBDA`      | 0.95            | GAE smoothing parameter                                  |
-| `CLIP_EPS`        | 0.15            | PPO surrogate clipping range (conservative updates)      |
-| `ENT_COEF`        | 0.05            | Entropy bonus — crucial for long-snake exploration       |
-| `VF_COEF`         | 0.5             | Value function loss coefficient                          |
-| `MAX_GRAD`        | 0.5             | Gradient clipping norm                                   |
-| `N_EPOCHS`        | 10              | PPO epochs per update                                    |
-| `BATCH_SIZE`      | 256             | Mini-batch size per gradient step (stable gradients)     |
-| `N_STEPS`         | 1024            | Rollout steps per env before update (better GAE)         |
-| `N_ENVS`          | 8               | Parallel environments (8192 steps/collect total)         |
-| `MAX_STEPS`       | 1000            | Max episode length (allows eating 23+ foods)             |
-| `total_timesteps` | 15 000 000      | Training budget                                          |
-| `hidden_size`     | 256             | Neurons in shared trunk layers                           |
-
----
-
-## 📈 Reward Shaping
-
-| Event                | Reward                                                              |
-| -------------------- | ------------------------------------------------------------------- |
-| Survival (each step) | +0.02                                                               |
-| Food proximity       | +0.1 × (prev_manhattan − new_manhattan) / CELL *(potential-based)* |
-| Food eaten           | +10.0                                                               |
-| Win (grid full)      | +20.0                                                               |
-| Death (wall or body) | −10.0 − length × 0.5                                               |
-| Stagnation penalty   | −0.5 if `steps_since_food > max(100, 300 − length×5)` *(adaptive)* |
-
-The death penalty scales with snake length : losing a long snake is penalized more than losing a short one. The potential-based proximity reward provides dense feedback at every step — it cannot distort the optimal policy since it is grounded in a potential function (Manhattan distance to food).
-
----
-
-## 📚 Inspiration / Sources
+## 📖 Inspiration / Sources
 
 Built entirely from scratch 🛠️ !
 
