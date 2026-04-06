@@ -37,7 +37,7 @@ This project is part of a series of **4 Snake AI implementations** using differe
 | **Paradigm** | Evolutionary | Imitation Learning | Reinforcement Learning | Reinforcement Learning |
 | **Algorithm type** | Neuroevolution | Supervised (XGBoost + DAgger) | Off-policy (Q-learning) | On-policy (Actor-Critic) |
 | **Architecture** | 16 → ~28 hidden (final, evolved) → 4 | 26 → 1 600 trees (400×4) → 4 | 28 → 256 → 256 → 128 → 4 | 28 → 256 → 256 → {128→4 (π), 128→1 (V)} |
-| **Parameters** | ~200–500 (evolves) | N/A (boosted trees) | ~140k | ~145k |
+| **Model complexity** | ~200–500 params (evolves) | ~80k–200k decision nodes | ~140k params | ~145k params |
 | **Exploration** | Genetic mutations + speciation | DAgger oracle (β : 0.8 → 0.05) | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) |
 | **Memory / Buffer** | Population (100 genomes) | Supervised buffer (300 000) | Experience Replay (100 000) | Rollout buffer (2 048 steps) |
 | **Batch** | — (full population eval.) | Full dataset per round | 128 | 64 |
