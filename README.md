@@ -32,24 +32,24 @@ The project also includes a full **Explainable AI (XAI)** suite adapted for the 
 
 This project is part of a series of **4 Snake AI implementations** using different AI paradigms on the same game :
 
-| Aspect | 🧬 [NEAT](https://github.com/Thibault-GAREL/AI_snake_genetic_version) | 🤖 [DQL (DQN)](https://github.com/Thibault-GAREL/AI_snake_DQN_version) | 🎯 [PPO](https://github.com/Thibault-GAREL/AI_snake_PPO_version) ★ | 🌳 [Decision Tree](https://github.com/Thibault-GAREL/AI_snake_decision_tree_version) |
+| Aspect | 🧬 [NEAT](https://github.com/Thibault-GAREL/AI_snake_genetic_version) | 🌳 [Decision Tree](https://github.com/Thibault-GAREL/AI_snake_decision_tree_version) | 🤖 [DQL (DQN)](https://github.com/Thibault-GAREL/AI_snake_DQN_version) | 🎯 [PPO](https://github.com/Thibault-GAREL/AI_snake_PPO_version) ★ |
 | --- | --- | --- | --- | --- |
-| **Paradigm** | Evolutionary | Reinforcement Learning | Reinforcement Learning | Imitation Learning |
-| **Algorithm type** | Neuroevolution | Off-policy (Q-learning) | On-policy (Actor-Critic) | Supervised (XGBoost + DAgger) |
-| **Output** | Actions [4] | Q-values [4] | Policy logits [4] + V(s) [1] | Class probabilities [4] |
-| **Input features** | 16 | 28 | 28 | 26 |
-| **Architecture** | Evolving MLP (topology changes) | MLP 28→256→256→128→4 | Actor-Critic shared trunk 28→256→256 | 1 600 boosted trees (400 × 4 classes) |
-| **Hidden neurons / nodes** | ~28 nodes (evolves) | 640 hidden neurons | 896 hidden neurons | ~80k–200k decision nodes |
-| **Exploration** | Genetic mutations + speciation | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) | DAgger oracle (β : 0.8 → 0.05) |
-| **Memory / Buffer** | Population (100 genomes) | Experience Replay (100 000) | Rollout buffer (2 048 steps) | Supervised buffer (300 000) |
-| **Batch** | — (full population eval.) | 128 | 64 | Full dataset per round |
-| **Training time** | ~15 h | ~2.5 h (GPU) | ~3 h (GPU) | ~12 min (GPU) |
-| **Max score** | > 20 | **45** | **64** | **43** |
-| **Mean score** | 10 | **22.60** | **38.67** | **22.77** |
-| **Reward signal** | ❌ (fitness only) | ✅ | ✅ | ❌ (oracle labels) |
+| **Paradigm** | Evolutionary | Imitation Learning | Reinforcement Learning | Reinforcement Learning |
+| **Algorithm type** | Neuroevolution | Supervised (XGBoost + DAgger) | Off-policy (Q-learning) | On-policy (Actor-Critic) |
+| **Output** | Actions [4] | Class probabilities [4] | Q-values [4] | Policy logits [4] + V(s) [1] |
+| **Input features** | 16 | 26 | 28 | 28 |
+| **Architecture** | Evolving MLP (topology changes) | 1 600 boosted trees (400 × 4 classes) | MLP 28→256→256→128→4 | Actor-Critic shared trunk 28→256→256 |
+| **Hidden neurons / nodes** | ~28 nodes (evolves) | ~80k–200k decision nodes | 640 hidden neurons | 896 hidden neurons |
+| **Exploration** | Genetic mutations + speciation | DAgger oracle (β : 0.8 → 0.05) | ε-greedy (1.0 → 0.01) | Entropy bonus (coef 0.05) |
+| **Memory / Buffer** | Population (100 genomes) | Supervised buffer (300 000) | Experience Replay (100 000) | Rollout buffer (2 048 steps) |
+| **Batch** | — (full population eval.) | Full dataset per round | 128 | 64 |
+| **Training time** | ~15 h | ~12 min (GPU) | ~2.5 h (GPU) | ~3 h (GPU) |
+| **Max score** | > 20 | **43** | **45** | **64** |
+| **Mean score** | 10 | **22.77** | **22.60** | **38.67** |
+| **Reward signal** | ❌ (fitness only) | ❌ (oracle labels) | ✅ | ✅ |
 | **GPU support** | ❌ | ✅ | ✅ | ✅ |
-| **Sample efficiency** | 🔴 Low | 🟡 Medium | 🔴 Low | 🟢 High |
-| **Intrinsic interpretability** | 🟡 Low | 🔴 Black box | 🔴 Black box | 🟢 High (tree paths) |
+| **Sample efficiency** | 🔴 Low | 🟢 High | 🟡 Medium | 🔴 Low |
+| **Intrinsic interpretability** | 🟡 Low | 🟢 High (tree paths) | 🔴 Black box | 🔴 Black box |
 | **XAI suite** | ✅ 4 scripts | ✅ 4 scripts | ✅ 4 scripts | ✅ 4 scripts |
 
 > ★ = current repository
