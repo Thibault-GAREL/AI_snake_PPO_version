@@ -20,7 +20,7 @@ This project is the **third installment** of my Snake AI series :
 
 - 🎮 The Snake game itself : [snake_game](https://github.com/Thibault-GAREL/snake_game)
 - 🧬 First AI version using NEAT (NeuroEvolution) : [AI_snake_genetic_version](https://github.com/Thibault-GAREL/AI_snake_genetic_version)
-- 🤖 Second AI version using DQN : [AI_snake_DQL](https://github.com/Thibault-GAREL/AI_snake_DQL)
+- 🤖 Second AI version using DQN : [AI_snake_DQN_version](https://github.com/Thibault-GAREL/AI_snake_DQN_version)
 
 This time, the agent learns to play Snake using **Proximal Policy Optimization (PPO)** with PyTorch and CUDA support. Unlike DQN which learns Q-values off-policy from a replay buffer, PPO is an **on-policy actor-critic** algorithm : it collects rollouts, estimates advantages via GAE, and updates both a policy (actor) and a value function (critic) jointly, with a clipped surrogate objective to prevent destructive updates. 🤖🎯
 
@@ -32,7 +32,7 @@ The project also includes a full **Explainable AI (XAI)** suite adapted for the 
 
 This project is part of a series of **4 Snake AI implementations** using different AI paradigms on the same game :
 
-| Aspect | 🧬 [NEAT](https://github.com/Thibault-GAREL/AI_snake_genetic_version) | 🤖 [DQL (DQN)](https://github.com/Thibault-GAREL/AI_snake_DQL) | 🎯 [PPO](https://github.com/Thibault-GAREL/snake_PPO_V2) ★ | 🌳 [Decision Tree](https://github.com/Thibault-GAREL/AI_snake_decision_tree_version) |
+| Aspect | 🧬 [NEAT](https://github.com/Thibault-GAREL/AI_snake_genetic_version) | 🤖 [DQL (DQN)](https://github.com/Thibault-GAREL/AI_snake_DQN_version) | 🎯 [PPO](https://github.com/Thibault-GAREL/AI_snake_PPO_version) ★ | 🌳 [Decision Tree](https://github.com/Thibault-GAREL/AI_snake_decision_tree_version) |
 | --- | --- | --- | --- | --- |
 | **Paradigm** | Evolutionary | Reinforcement Learning | Reinforcement Learning | Imitation Learning |
 | **Algorithm type** | Neuroevolution | Off-policy (Q-learning) | On-policy (Actor-Critic) | Supervised (XGBoost + DAgger) |
@@ -339,8 +339,8 @@ _4 views : |SHAP|×action (absolute importance), signed SHAP×action (direction 
 Clone the repository and install dependencies :
 
 ```bash
-git clone https://github.com/Thibault-GAREL/snake_PPO_V2.git
-cd snake_PPO_V2
+git clone https://github.com/Thibault-GAREL/AI_snake_PPO_version.git
+cd AI_snake_PPO_version
 
 python -m venv .venv
 source .venv/bin/activate       # Linux / macOS
