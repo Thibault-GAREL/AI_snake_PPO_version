@@ -37,7 +37,7 @@ from PPO import (
     Manager_snake, Snake,
     food as FoodData,
     _dist_north, _dist_south, _dist_west, _dist_east,
-    _dist_diag, _food_distances,
+    _dist_diag, _food_distances, _danger_binary,
 )
 
 OUT_DIR = "xai_qvalues_ppo"
@@ -80,7 +80,7 @@ def build_state_at_ppo(col: int, row: int,
                         food_col: int, food_row: int,
                         direction: str = "RIGHT") -> np.ndarray:
     """
-    Construit un état PPO 22-dim pour (col, row) avec nourriture en (food_col, food_row).
+    Construit un état PPO 28-dim pour (col, row) avec nourriture en (food_col, food_row).
     Serpent de longueur 1, urgence = 0 (début d'épisode).
     """
     W    = SnakeEnv.WIDTH
@@ -104,16 +104,24 @@ def build_state_at_ppo(col: int, row: int,
 
     fn, fne, fe, fse, fsm, fsw, fw, fnw = _food_distances(snake, f)
 
+    food_dx = (f.x - snake.list_snake[0].x) / W
+    food_dy = (f.y - snake.list_snake[0].y) / H
+
+    danger_nesw = _danger_binary(snake, W, H)
+
     DIR_IDX = {"UP": 0, "RIGHT": 1, "DOWN": 2, "LEFT": 3}
     dir_oh  = [0.0, 0.0, 0.0, 0.0]
     dir_oh[DIR_IDX[direction]] = 1.0
 
     raw = np.array([
-        dn, dne, de, dse, ds, dsw, dw, dnw,
-        fn, fne, fe, fse, fsm, fsw, fw, fnw,
-        *dir_oh,
-        0.0,   # longueur normalisée = 0 (serpent de 1)
-        0.0,   # urgence = 0
+        dn, dne, de, dse, ds, dsw, dw, dnw,   # [0:8]   danger distances
+        fn, fne, fe, fse, fsm, fsw, fw, fnw,   # [8:16]  food distances
+        food_dx,                                # [16]    food delta x
+        food_dy,                                # [17]    food delta y
+        *danger_nesw,                           # [18:22] danger binaire N/E/S/W
+        *dir_oh,                                # [22:26] direction one-hot
+        0.0,                                    # [26]    longueur normalisée (serpent de 1)
+        0.0,                                    # [27]    urgence = 0
     ], dtype=np.float32)
 
     raw[:16] /= M

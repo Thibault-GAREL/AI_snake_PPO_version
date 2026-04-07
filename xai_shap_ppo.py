@@ -51,14 +51,22 @@ def out(filename: str) -> str:
 
 # ─── Constantes ────────────────────────────────────────────────────────────────
 FEATURE_NAMES = [
-    "Danger N",   "Danger NE",  "Danger E",   "Danger SE",
-    "Danger S",   "Danger SW",  "Danger W",   "Danger NW",
-    "Food N",     "Food NE",    "Food E",     "Food SE",
-    "Food S",     "Food SW",    "Food W",     "Food NW",
-    "Dir UP",     "Dir RIGHT",  "Dir DOWN",   "Dir LEFT",
-    "Longueur",   "Urgence",
+    # Danger distances (continues) [0:8]
+    "Danger dist N",  "Danger dist NE", "Danger dist E",  "Danger dist SE",
+    "Danger dist S",  "Danger dist SW", "Danger dist W",  "Danger dist NW",
+    # Food distances (continues) [8:16]
+    "Food dist N",    "Food dist NE",   "Food dist E",    "Food dist SE",
+    "Food dist S",    "Food dist SW",   "Food dist W",    "Food dist NW",
+    # Food delta (continu) [16:18]
+    "Food delta X",   "Food delta Y",
+    # Danger binaire immédiat N/E/S/W [18:22]
+    "Danger bin N",   "Danger bin E",   "Danger bin S",   "Danger bin W",
+    # Direction one-hot [22:26]
+    "Dir UP",         "Dir RIGHT",      "Dir DOWN",       "Dir LEFT",
+    # Contexte [26:28]
+    "Longueur",       "Urgence",
 ]
-N_FEATURES = len(FEATURE_NAMES)   # 22
+N_FEATURES = len(FEATURE_NAMES)   # 28
 
 ACTION_NAMES  = ["UP ↑", "RIGHT →", "DOWN ↓", "LEFT ←"]
 ACTION_COLORS = ["#4FC3F7", "#81C784", "#FFB74D", "#F06292"]

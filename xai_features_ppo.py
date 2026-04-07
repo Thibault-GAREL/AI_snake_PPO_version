@@ -45,26 +45,33 @@ def out(filename: str) -> str:
 
 # ─── Noms des 22 features ──────────────────────────────────────────────────────
 FEATURE_NAMES = [
-    # Danger (obstacles)
-    "Danger N",     "Danger NE",    "Danger E",     "Danger SE",
-    "Danger S",     "Danger SW",    "Danger W",     "Danger NW",
-    # Nourriture
-    "Food N",       "Food NE",      "Food E",       "Food SE",
-    "Food S",       "Food SW",      "Food W",       "Food NW",
-    # Direction one-hot
-    "Dir UP",       "Dir RIGHT",    "Dir DOWN",     "Dir LEFT",
-    # Contexte
-    "Longueur",     "Urgence food",
+    # Danger distances (continues) [0:8]
+    "Danger dist N",  "Danger dist NE", "Danger dist E",  "Danger dist SE",
+    "Danger dist S",  "Danger dist SW", "Danger dist W",  "Danger dist NW",
+    # Food distances (continues) [8:16]
+    "Food dist N",    "Food dist NE",   "Food dist E",    "Food dist SE",
+    "Food dist S",    "Food dist SW",   "Food dist W",    "Food dist NW",
+    # Food delta (continu) [16:18]
+    "Food delta X",   "Food delta Y",
+    # Danger binaire immédiat N/E/S/W [18:22]
+    "Danger bin N",   "Danger bin E",   "Danger bin S",   "Danger bin W",
+    # Direction one-hot [22:26]
+    "Dir UP",         "Dir RIGHT",      "Dir DOWN",       "Dir LEFT",
+    # Contexte [26:28]
+    "Longueur",       "Urgence food",
 ]
-N_FEATURES = len(FEATURE_NAMES)   # 22
+N_FEATURES = len(FEATURE_NAMES)   # 28
 
 # Catégories pour la colorisation
-# 0-7 : danger, 8-15 : nourriture, 16-19 : direction, 20-21 : contexte
+# 0-7 : danger dist, 8-15 : food dist, 16-17 : food delta,
+# 18-21 : danger binaire, 22-25 : direction, 26-27 : contexte
 def _feat_color(i: int) -> str:
-    if i < 8:   return "#4FC3F7"   # bleu  → danger
-    if i < 16:  return "#FFB74D"   # orange → nourriture
-    if i < 20:  return "#81C784"   # vert  → direction
-    return              "#F06292"  # rose  → contexte
+    if i < 8:   return "#4FC3F7"   # bleu     → danger distances
+    if i < 16:  return "#FFB74D"   # orange   → food distances
+    if i < 18:  return "#FFF176"   # jaune    → food delta
+    if i < 22:  return "#EF5350"   # rouge    → danger binaire
+    if i < 26:  return "#81C784"   # vert     → direction
+    return              "#F06292"  # rose     → contexte
 
 FEAT_COLORS = [_feat_color(i) for i in range(N_FEATURES)]
 
