@@ -220,7 +220,12 @@ This project is part of a series of **4 Snake AI implementations** using differe
 > ★ = current repository
 > Each project includes an XAI suite of 4 analysis scripts.
 
-![Gantt](img/gantt_mineur.png)
+<details>
+<summary>📅 Development timeline — Gantt chart</summary>
+
+![Gantt](Images/gantt_mineur.png)
+
+</details>
 
 ---
 
