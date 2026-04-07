@@ -220,6 +220,37 @@ This project is part of a series of **4 Snake AI implementations** using differe
 > ★ = current repository
 > Each project includes an XAI suite of 4 analysis scripts.
 
+<details>
+<summary>📅 Development timeline — Gantt chart</summary>
+
+```mermaid
+gantt
+    title Snake AI Series — Development Timeline
+    dateFormat YYYY-MM-DD
+    axisFormat %b '%y
+
+    section 🧬 NEAT
+    Implementation + Training (15h, CPU)  : done, 2025-05-01, 2025-05-24
+    XAI Suite                             : done, 2026-03-23, 2026-04-07
+
+    section 🤖 DQL (DQN)
+    Implementation                        : done, 2026-03-19, 2026-03-30
+    Training (2.5h, GPU)                  : done, 2026-03-30, 2026-04-01
+    XAI Suite                             : done, 2026-04-01, 2026-04-07
+
+    section 🎯 PPO
+    Implementation                        : done, 2026-03-23, 2026-03-30
+    Training (3h, GPU)                    : done, 2026-03-30, 2026-04-01
+    XAI Suite                             : done, 2026-04-01, 2026-04-07
+
+    section 🌳 Decision Tree
+    Implementation                        : done, 2026-03-23, 2026-03-30
+    Training (12min, GPU)                 : milestone, 2026-03-30, 0d
+    XAI Suite                             : done, 2026-03-30, 2026-04-07
+```
+
+</details>
+
 ---
 
 ## 🔬 Explainable AI (XAI) Suite
